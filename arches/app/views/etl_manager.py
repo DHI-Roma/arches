@@ -50,11 +50,11 @@ class ETLManagerView(View):
                 JOIN nodes n ON e.nodegroupid = n.nodeid
                 WHERE loadid = %s AND e.type = 'tile'
                 GROUP BY n.name, e.error, e.datatype, e.type, e.nodegroupid)
-                -- Add any errors that are neither node nor tile, e.g. early json-ld failures
+                -- Add any errors without a nodegroup, e.g. early json-ld failures
                 UNION
                 (SELECT e.source, e.error, e.datatype, count(e.source), e.type, e.nodeid
                 FROM load_errors e
-                WHERE loadid = %s AND e.type NOT IN ('node', 'tile')
+                WHERE loadid = %s AND e.nodegroupid IS NULL
                 GROUP BY e.source, e.error, e.datatype, e.type, e.nodeid);
             """,
                 [loadid, loadid, loadid],
@@ -84,20 +84,41 @@ class ETLManagerView(View):
 
     def node_error(self, loadid, nodeid, error):
         """
-        Creates records in the load_staging table (validated before poulating the load_staging table with error message)
-        Collects error messages if any and returns table of error messages
+        Creates records in the load_staging table (validated before poulating
+        the load_staging table with error message).
+        Collects error messages if any and returns table of error messages.
         """
 
+        sql = """
+        SELECT n.name as node, e.error, e.message, e.value, e.source, e.nodeid, e.nodegroupid
+        FROM load_errors e
+        """
+        if nodeid == "null":
+            nodeid = None
+        if error == "null":
+            error = None
+
+        if nodeid:
+            sql += """
+            JOIN nodes n ON n.nodeid = e.nodeid
+            WHERE loadid = %s AND e.nodeid = %s AND e.error = %s
+            """
+            params = [loadid, nodeid, error]
+        elif error:
+            sql += """
+            LEFT JOIN nodes n ON n.nodeid = e.nodeid
+            WHERE loadid = %s AND e.nodeid IS NULL AND e.error = %s 
+            """
+            params = [loadid, error]
+        else:
+            sql += """
+            LEFT JOIN nodes n ON n.nodeid = e.nodeid
+            WHERE loadid = %s AND e.nodeid IS NULL AND e.error IS NULL
+            """
+            params = [loadid]
+
         with connection.cursor() as cursor:
-            cursor.execute(
-                """
-                SELECT n.name as node, e.error, e.message, e.value, e.source, e.nodeid, e.nodegroupid
-                FROM load_errors e
-                JOIN nodes n ON n.nodeid = e.nodeid
-                WHERE loadid = %s AND e.nodeid = %s AND e.error = %s
-                """,
-                [loadid, nodeid, error],
-            )
+            cursor.execute(sql, params)
             rows = self.dictfetchall(cursor)
         return {"success": True, "data": rows}
 
@@ -202,6 +223,8 @@ class ETLManagerView(View):
             response = self.node_error(loadid, nodeid, error)
         elif action == "errorReport" and loadid:
             return JSONResponse(self.error_report(loadid)["data"], indent=2)
+        else:
+            return JSONErrorResponse(status=HTTPStatus.BAD_REQUEST)
         return JSONResponse(response)
 
     @staticmethod

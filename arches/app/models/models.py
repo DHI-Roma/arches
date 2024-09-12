@@ -2315,7 +2315,11 @@ class LoadEvent(models.Model):
 
 class LoadStaging(models.Model):
     nodegroup = models.ForeignKey(
-        NodeGroup, db_column="nodegroupid", on_delete=models.CASCADE
+        NodeGroup,
+        blank=True,
+        null=True,
+        db_column="nodegroupid",
+        on_delete=models.CASCADE,
     )
     load_event = models.ForeignKey(
         LoadEvent, db_column="loadid", on_delete=models.CASCADE
