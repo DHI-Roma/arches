@@ -878,8 +878,8 @@ class Resource(models.ResourceInstance):
         )
         all_resource_ids = set()
         for relation in resource_relations["relations"]:
-            all_resource_ids.add(relation["resourceinstanceidto"])
-            all_resource_ids.add(relation["resourceinstanceidfrom"])
+            all_resource_ids.add(str(relation.resourceinstanceidto_id))
+            all_resource_ids.add(str(relation.resourceinstanceidfrom_id))
         exclusive_set, filtered_instances = get_filtered_instances(
             user, se, resources=list(all_resource_ids)
         )
