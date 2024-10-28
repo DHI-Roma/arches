@@ -870,6 +870,7 @@ class Resource(models.ResourceInstance):
 
         ret["total"] = {"value": resource_relations["total"]}
         instanceids = set()
+        preflabel_lookup = dict()
 
         readable_graphids = set(
             permission_backend.get_resource_types_by_perm(
@@ -901,9 +902,15 @@ class Resource(models.ResourceInstance):
                 and str(resourceinstancefrom_graphid) in readable_graphids
             ):
                 try:
-                    preflabel = get_preflabel_from_valueid(
-                        relation["relationshiptype"], lang
-                    )
+                    if f'{relation["relationshiptype"]}{lang}' not in preflabel_lookup:
+                        preflabel_lookup[f'{relation["relationshiptype"]}{lang}'] = (
+                            get_preflabel_from_valueid(
+                                relation["relationshiptype"], lang
+                            )
+                        )
+                    preflabel = preflabel_lookup[
+                        f'{relation["relationshiptype"]}{lang}'
+                    ]
                     relation["relationshiptype_label"] = preflabel["value"] or ""
                 except:
                     relation["relationshiptype_label"] = (
