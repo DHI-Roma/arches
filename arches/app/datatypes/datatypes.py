@@ -2220,6 +2220,18 @@ class ResourceInstanceDataType(BaseDataType):
 
     def transform_value_for_tile(self, value, **kwargs):
         try:
+            uuid.UUID(value)
+            return [
+                {
+                    "resourceId": str(value),
+                    "ontologyProperty": "",
+                    "inverseOntologyProperty": "",
+                    "resourceXresourceId": str(uuid.uuid4()),
+                }
+            ]
+        except ValueError:
+            print("not a uuid")
+        try:
             return json.loads(value)
         except ValueError:
             # do this if json (invalid) is formatted with single quotes, re #6390
