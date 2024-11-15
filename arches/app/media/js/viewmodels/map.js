@@ -317,6 +317,10 @@ define([
                 map.fitBounds(ko.unwrap(params.bounds), boundingOptions);
             }
 
+            // If searchQueryId is already available, add the search layer
+            if (self.searchQueryId()) {
+                self.addSearchLayer(self.searchQueryId());
+            }
         });
 
         this.bounds = ko.observable(ko.unwrap(params.bounds) || arches.hexBinBounds);
