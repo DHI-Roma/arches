@@ -40,6 +40,7 @@ define([
             options.name = "Map Filter";
             BaseFilter.prototype.initialize.call(this, options);
 
+            options.searchQueryId = this.searchQueryId;
             options.sources = {
                 "geojson-search-buffer-data": {
                     "type": "geojson",
