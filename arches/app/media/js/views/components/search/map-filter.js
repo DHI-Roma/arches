@@ -369,14 +369,6 @@ define([
                     this.updateFilter();
                 }, this);
 
-                this.searchAggregations.subscribe(this.updateSearchResultsLayers, this);
-                if (ko.isObservable(bins)) {
-                    bins.subscribe(this.updateSearchResultsLayers, this);
-                }
-                if (this.searchAggregations()) {
-                    this.updateSearchResultsLayers();
-                }
-                this.mouseoverInstanceId.subscribe(updateSearchResultPointLayer);
             }, this);
         },
 
