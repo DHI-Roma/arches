@@ -21,7 +21,11 @@ from django.conf.urls.i18n import i18n_patterns
 from django.contrib.auth import views as auth_views
 from django.urls import include, path, re_path
 from arches.app.views import concept, main, map, search, graph, api
-from arches.app.views.api import auth as api_auth, user as api_user
+from arches.app.views.api import (
+    auth as api_auth,
+    user as api_user,
+    test_streaming as test_streaming,
+)
 from arches.app.views.admin import ReIndexResources, ClearUserPermissionCache
 from arches.app.views.etl_manager import ETLManagerView
 from arches.app.views.file import FileView, TempFileView
@@ -782,6 +786,7 @@ urlpatterns = [
         name="spatialview_api",
     ),
     re_path("^api", api.API404.as_view(), name="api_404"),
+    path("test_streaming", test_streaming.test_streaming, name="test_streaming"),
 ]
 
 # This must be included in core to keep webpack happy, but cannot be appended when running a project.
