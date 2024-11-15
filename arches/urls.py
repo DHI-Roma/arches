@@ -56,6 +56,7 @@ from arches.app.views.resource import (
     ResourceActivityStreamPageView,
     ResourceActivityStreamCollectionView,
 )
+from arches.app.views.search_layer import SearchLayer
 from arches.app.views.plugin import PluginView
 from arches.app.views.workflow_history import WorkflowHistoryView
 from arches.app.views.concept import RDMView
@@ -674,6 +675,11 @@ urlpatterns = [
         % uuid_regex,
         api.MVT.as_view(),
         name="mvt",
+    ),
+    path(
+        "search-layer/<int:zoom>/<int:x>/<int:y>.pbf",
+        SearchLayer.as_view(),
+        name="search_layer",
     ),
     re_path(r"^images$", api.Images.as_view(), name="images"),
     re_path(
