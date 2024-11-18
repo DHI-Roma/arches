@@ -146,7 +146,7 @@ class StandardSearchView(BaseSearchView):
 
         hpla_idx = f"{settings.ELASTICSEARCH_PREFIX}_{RESOURCES_INDEX}"
         pit_response = se.es.open_point_in_time(
-            index=hpla_idx, keep_alive="2m"  # Adjust as needed
+            index=hpla_idx, keep_alive="5m"  # Adjust as needed
         )
         pit_id = pit_response.get("id")
         # Perform the search

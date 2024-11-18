@@ -112,7 +112,7 @@ class SearchLayer(View):
             # if int(y) == 203:
             #     pprint(new_query.dsl)
             results = se.es.search(
-                pit={"id": pit_id, "keep_alive": "2m"}, _source=False, **new_query.dsl
+                pit={"id": pit_id, "keep_alive": "5m"}, _source=False, **new_query.dsl
             )
             elapsed = time() - start
             # print(
@@ -170,7 +170,7 @@ class SearchLayer(View):
 
             # Execute the search
             results = se.es.search(
-                pit={"id": pit_id, "keep_alive": "2m"}, **new_query.dsl
+                pit={"id": pit_id, "keep_alive": "5m"}, **new_query.dsl
             )
 
             # Process the hits to generate features
