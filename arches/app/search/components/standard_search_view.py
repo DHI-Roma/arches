@@ -1,5 +1,5 @@
 from typing import Dict, Tuple
-
+import hashlib
 from arches.app.models.system_settings import settings
 from arches.app.search.components.base_search_view import BaseSearchView
 from arches.app.search.components.base import SearchFilterFactory
@@ -138,38 +138,6 @@ class StandardSearchView(BaseSearchView):
         if load_tiles:
             search_query_object["query"].include("tiles")
 
-    def set_search_pit(self, search_query_object, se, cache, **kwargs):
-        query_obj = kwargs.get("search_request_object", self.request.GET)
-        resourceids_only_query_hash_key = create_searchresults_cache_key(
-            self.request, query_obj, resourceids_only=True
-        )
-        pit_response = se.es.open_point_in_time(
-            index=RESOURCES_INDEX, keep_alive="2m"  # Adjust as needed
-        )
-        pit_id = pit_response["pit_id"]
-
-        # Perform the search
-        search_params = {
-            # Your search query parameters
-        }
-
-        search_response = search_query_object["query"].search(
-            index=RESOURCES_INDEX,
-            body=search_params,
-            pit={"id": pit_id, "keep_alive": "2m"},
-            size=1000,  # Adjust as needed
-        )
-        # TODO: how can I cache the search query itself? The QueryObject is really hard to serialize
-        # could just re-instantiate the filters from the search_layer to regenerate the QueryObject from scratch
-
-        # Cache the pit_id and search parameters
-        cache.set(
-            resourceids_only_query_hash_key,
-            json.dumps({"pit_id": pit_id, "search_params": search_params}),
-            timeout=120,
-        )
-        return resourceids_only_query_hash_key
-
     def execute_resourceids_only_query(self, search_query_object, cache, se, **kwargs):
         search_request_object = kwargs.get("search_request_object", self.request.GET)
         resourceids_only_query_hash_key = create_searchresults_cache_key(
@@ -192,12 +160,12 @@ class StandardSearchView(BaseSearchView):
         cache.set(
             resourceids_only_query_hash_key + "_pit",
             pit_id,
-            timeout=120,
+            timeout=300,
         )
         cache.set(
             resourceids_only_query_hash_key + "_dsl",
             search_query_object["query"].__str__(),
-            timeout=120,
+            timeout=300,
         )
 
         return resourceids_only_query_hash_key
@@ -298,11 +266,6 @@ class StandardSearchView(BaseSearchView):
         if returnDsl:
             return response_object, search_query_object
 
-        # at this point we want to FIRST do an unlimited query to get all resourceids
-        # of the results
-        # THEN SECOND we want to do a second query to get a rich set of results only for the page
-        unpaged_query = None
-        search_query_object["query"].include("tiles")
         for_export = get_str_kwarg_as_bool("export", sorted_query_obj)
         if not for_export:
             resourceids_only_query_hash_key = self.execute_resourceids_only_query(
@@ -311,37 +274,6 @@ class StandardSearchView(BaseSearchView):
                 se,
                 search_request_object=sorted_query_obj,
             )
-
-        # now I know the resourceids have been cached under the resourceids_only_query_hash_key
-        # I should set a start/end limit for the second query
-        paging_filter = search_filter_factory.get_filter("paging-filter")
-        if paging_filter:
-            paging_filter.append_dsl(
-                search_query_object,
-                permitted_nodegroups=permitted_nodegroups,
-                include_provisional=include_provisional,
-                load_tiles=load_tiles,
-                for_export=for_export,
-                querystring=sorted_query_obj.get("paging-filter", "{}"),
-                search_request_object=sorted_query_obj,
-            )
-
-        search_query_object["query"].include("graph_id")
-        # if geom_only or for_export or map_manager or load_tiles:
-        search_query_object["query"].include("geometries")
-        search_query_object["query"].include("points")
-        # if not geom_only:
-        for prop in essential_result_properties:
-            search_query_object["query"].include(prop)
-        # if load_tiles:
-        # search_query_object["query"].include("tiles")
-        search_query_object["query"].include("resourceinstanceid")
-
-        self.execute_paged_query(
-            search_query_object,
-            response_object,
-            search_request_object=sorted_query_obj,
-        )
 
         for filter_type, querystring in list(sorted_query_obj.items()):
             search_filter = search_filter_factory.get_filter(filter_type)
@@ -368,3 +300,31 @@ class StandardSearchView(BaseSearchView):
                     response_object[key] = value
 
         return response_object, search_query_object
+
+
+def create_searchresults_cache_key(request, search_query, **kwargs):
+    """
+    method to create a hash cache key
+    blends a snapshot of the current database with whatever the searchquery was
+    also cleans/sorts the searchquery before converting to string in order to normalize
+    kwargs:
+    - dict: search_query - contains search query filters/parameters
+    """
+    resourceids_only = kwargs.get("resourceids_only", False)
+    user_proxy = (
+        request.user.username
+        if request.user.username == "anonymous"
+        else str(request.user.id)
+    )
+    search_query_string = "".join([k + str(v) for k, v in sorted(search_query.items())])
+
+    search_query_string = search_query_string.strip()
+
+    hashable_string = search_query_string + user_proxy
+    hashable_string += "rids" if resourceids_only else ""
+    b = bytearray()
+    b.extend((search_query_string + user_proxy).encode())
+    search_query_cache_key_hash = hashlib.sha1(b)
+    search_query_cache_key_hash = search_query_cache_key_hash.hexdigest()
+
+    return search_query_cache_key_hash
