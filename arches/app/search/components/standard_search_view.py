@@ -16,6 +16,7 @@ from arches.app.utils.permission_backend import (
     user_is_resource_exporter,
 )
 from arches.app.utils.string_utils import get_str_kwarg_as_bool
+from django.core.cache import cache
 from django.utils.translation import gettext as _
 from datetime import datetime
 import logging
@@ -169,53 +170,37 @@ class StandardSearchView(BaseSearchView):
         )
         return resourceids_only_query_hash_key
 
-    def execute_resourceids_only_query(
-        self, search_query_object, response_object, cache, **kwargs
-    ):
-        # cached_response_json = cache.get(cache_key)
-        query_obj = kwargs.get("search_request_object", self.request.GET)
+    def execute_resourceids_only_query(self, search_query_object, cache, se, **kwargs):
+        search_request_object = kwargs.get("search_request_object", self.request.GET)
         resourceids_only_query_hash_key = create_searchresults_cache_key(
-            self.request, query_obj, resourceids_only=True
+            self.request, search_request_object, resourceids_only=True
         )
-        # did we already cache result resourceids for this query under this query hash?
-        cached_result_resourceids = cache.get(resourceids_only_query_hash_key)
-        if (
-            cached_result_resourceids
-        ):  # we already did the work here; we'll return the hash key
-            return resourceids_only_query_hash_key
-        else:
-            print(
-                f"no cached resourceids for hashkey {resourceids_only_query_hash_key}"
-            )
 
-        if resourceinstanceid is None:
-            results = search_query_object["query"].search(
-                index=RESOURCES_INDEX, limit=10000, scroll="1m"
-            )
-            scroll_id = results["_scroll_id"]
-            scroll_size = results["hits"]["total"]["value"]
-            total_results = results["hits"]["total"]["value"]
-            if query_obj.get("paging-filter", None) is None:
-                while scroll_size > 0:
-                    page = search_query_object["query"].se.es.scroll(
-                        scroll_id=scroll_id, scroll="3m"
-                    )
-                    scroll_size = len(page["hits"]["hits"])
-                    results["hits"]["hits"] += page["hits"]["hits"]
-        else:
-            results = search_query_object["query"].search(
-                index=RESOURCES_INDEX, id=resourceinstanceid
-            )
-            total_results = 1
+        hpla_idx = f"{settings.ELASTICSEARCH_PREFIX}_{RESOURCES_INDEX}"
+        pit_response = se.es.open_point_in_time(
+            index=hpla_idx, keep_alive="2m"  # Adjust as needed
+        )
+        pit_id = pit_response.get("id")
+        # Perform the search
+        search_query_object["query"].prepare()
+        query_dsl = search_query_object["query"].dsl
+        search_response = se.es.search(
+            pit={"id": pit_id, "keep_alive": "5m"}, _source=False, **query_dsl
+        )
 
-        if results is not None:
-            all_resourceids = [hit["_id"] for hit in results["hits"]["hits"]]
-            cache.set(
-                resourceids_only_query_hash_key,
-                json.dumps(all_resourceids),
-                settings.SEARCH_RESULTS_CACHE_TIMEOUT,
-            )
-            return resourceids_only_query_hash_key
+        # Cache the pit_id and search parameters
+        cache.set(
+            resourceids_only_query_hash_key + "_pit",
+            pit_id,
+            timeout=120,
+        )
+        cache.set(
+            resourceids_only_query_hash_key + "_dsl",
+            search_query_object["query"].__str__(),
+            timeout=120,
+        )
+
+        return resourceids_only_query_hash_key
 
     def execute_query(self, search_query_object, response_object, **kwargs):
         for_export = get_str_kwarg_as_bool("export", self.request.GET)
@@ -322,10 +307,9 @@ class StandardSearchView(BaseSearchView):
         if not for_export:
             resourceids_only_query_hash_key = self.execute_resourceids_only_query(
                 search_query_object,
-                response_object,
                 cache,
+                se,
                 search_request_object=sorted_query_obj,
-                resourceinstanceid=resourceinstanceid,
             )
 
         # now I know the resourceids have been cached under the resourceids_only_query_hash_key
@@ -357,7 +341,6 @@ class StandardSearchView(BaseSearchView):
             search_query_object,
             response_object,
             search_request_object=sorted_query_obj,
-            resourceinstanceid=resourceinstanceid,
         )
 
         for filter_type, querystring in list(sorted_query_obj.items()):
@@ -366,6 +349,7 @@ class StandardSearchView(BaseSearchView):
                 search_filter.execute_query(search_query_object, response_object)
 
         if response_object["results"] is not None:
+            response_object["searchqueryid"] = resourceids_only_query_hash_key
             # allow filters to modify the results
             for filter_type, querystring in list(sorted_query_obj.items()):
                 search_filter = search_filter_factory.get_filter(filter_type)
