@@ -10,235 +10,164 @@ define([
     'templates/views/components/map-popup.htm'
 ], function($, _, arches, ko, koMapping, mapPopupProvider, mapConfigurator, ariaUtils) {
     const viewModel = function(params) {
-        var self = this;
-
-        const searchLayerIds = [
-            'searchtiles-unclustered-polygon-fill',
-            'searchtiles-unclustered-point',
-            'searchtiles-clusters',
-            'searchtiles-clusters-halo',
-            'searchtiles-cluster-count',
-            'searchtiles-unclustered-polypoint'
-        ];
+        const ZOOM_THRESHOLD = 14;
+        const self = this;
+        const searchLayerIds = ['clusters', 'cluster-count', 'unclustered-point', 'individual-points', 'individual-geometries'];
+        
         const searchLayerDefinitions = [
             {
-              "id": "searchtiles-unclustered-polygon-fill",
-              "type": "fill",
-              "paint": {
-                "fill-color": "#fa6003",
-                "fill-opacity": 0.3,
-                "fill-outline-color": "#fa6003"
-              },
-              "filter": [
-                "==",
-                "$type",
-                "Polygon"
-              ],
-              "source": "search-layer-source",
-              "source-layer": "search_layer",
-              "minzoom": 10,
-              "tolerance": 0.75
+                id: 'individual-points',
+                type: 'circle',
+                source: 'search-layer-source',
+                'source-layer': 'points',
+                minzoom: ZOOM_THRESHOLD,
+                paint: {
+                    'circle-color': '#fa6003',
+                    'circle-radius': 5,
+                    'circle-opacity': 1
+                }
             },
             {
-              "id": "searchtiles-unclustered-point",
-              "type": "circle",
-              "paint": {
-                "circle-color": "#fa6003",
-                "circle-radius": 6,
-                "circle-opacity": 1
-              },
-              "filter": [
-                "!",
-                [
-                  "has",
-                  "point_count"
-                ]
-              ],
-              "source": "search-layer-source",
-              "source-layer": "search_layer"
+                id: 'individual-geometries',
+                type: 'fill',
+                source: 'search-layer-source',
+                'source-layer': 'geometries',
+                minzoom: ZOOM_THRESHOLD-1,
+                paint: {
+                    'fill-color': '#fa6003',
+                    'fill-opacity': 0.3,
+                    'fill-outline-color': '#fa6003'
+                }
             },
             {
-              "id": "searchtiles-clusters",
-              "type": "circle",
-              "paint": {
-                "circle-color": "#fa6003",
-                "circle-radius": [
-                  "step",
-                  [
-                    "get",
-                    "point_count"
-                  ],
-                  10,
-                  100,
-                  20,
-                  750,
-                  30,
-                  1500,
-                  40,
-                  2500,
-                  50,
-                  5000,
-                  65
+                "id": "clusters",
+                "type": "circle",
+                "source": "search-layer-source",
+                "source-layer": "clusters",
+                "filter": [
+                    "all",
+                    ["has", "count"],
+                    [">", ["get", "count"], 1]
                 ],
-                "circle-opacity": [
-                  "case",
-                  [
-                    "boolean",
-                    [
-                      "has",
-                      "point_count"
+                "paint": {
+                    "circle-color": "#fa6003",
+                    "circle-radius": [
+                        "step",
+                        ["get", "count"],
+                        15,
+                        10, 20,
+                        50, 25,
+                        100, 30,
+                        500, 35,
+                        1000, 40
                     ],
-                    true
-                  ],
-                  1,
-                  0
-                ]
-              },
-              "filter": [
-                "all",
-                [
-                  "==",
-                  "$type",
-                  "Point"
-                ],
-                [
-                  "!=",
-                  "highlight",
-                  true
-                ]
-              ],
-              "source": "search-layer-source",
-              "source-layer": "search_layer"
+                    "circle-opacity": 0.8
+                },
+                "maxzoom": ZOOM_THRESHOLD,
+                "minzoom": 1
             },
             {
-              "id": "searchtiles-clusters-halo",
-              "type": "circle",
-              "paint": {
-                "circle-color": "#fa6003",
-                "circle-radius": [
-                  "step",
-                  [
-                    "get",
-                    "point_count"
-                  ],
-                  20,
-                  100,
-                  30,
-                  750,
-                  40,
-                  1500,
-                  50,
-                  2500,
-                  60,
-                  5000,
-                  75
+                "id": "cluster-count",
+                "type": "symbol",
+                "source": "search-layer-source",
+                "source-layer": "clusters",
+                "filter": [
+                    "all",
+                    ["has", "count"],
+                    [">", ["get", "count"], 0]
                 ],
-                "circle-opacity": [
-                  "case",
-                  [
-                    "boolean",
-                    [
-                      "has",
-                      "point_count"
-                    ],
-                    true
-                  ],
-                  0.5,
-                  0
-                ]
-              },
-              "filter": [
-                "all",
-                [
-                  "==",
-                  "$type",
-                  "Point"
-                ],
-                [
-                  "!=",
-                  "highlight",
-                  true
-                ]
-              ],
-              "maxzoom": 14,
-              "source": "search-layer-source",
-              "source-layer": "search_layer"
+                "layout": {
+                    "text-field": "{count}",
+                    "text-font": ["DIN Offc Pro Medium", "Arial Unicode MS Bold"],
+                    "text-size": 12
+                },
+                "paint": {
+                    "text-color": "#ffffff"
+                },
+                "maxzoom": ZOOM_THRESHOLD,
+                "minzoom": 1
             },
             {
-              "id": "searchtiles-cluster-count",
-              "type": "symbol",
-              "paint": {
-                "text-color": "#fff"
-              },
-              "filter": [
-                "has",
-                "point_count"
-              ],
-              "layout": {
-                "text-font": [
-                  "DIN Offc Pro Medium",
-                  "Arial Unicode MS Bold"
+                "id": "unclustered-point",
+                "type": "circle",
+                "source": "search-layer-source",
+                "source-layer": "clusters",
+                "filter": [
+                    "all",
+                    ["has", "count"],
+                    ["==", ["get", "count"], 1]
                 ],
-                "text-size": 14,
-                "text-field": "{point_count}"
-              },
-              "maxzoom": 14,
-              "source": "search-layer-source",
-              "source-layer": "search_layer"
-            },
-            {
-              "id": "searchtiles-unclustered-polypoint",
-              "type": "circle",
-              "paint": {
-                "circle-color": "#fa6003",
-                "circle-radius": 0,
-                "circle-opacity": 0,
-                "circle-stroke-color": "#fff",
-                "circle-stroke-width": 0
-              },
-              "filter": [
-                "!",
-                [
-                  "has",
-                  "point_count"
-                ]
-              ],
-              "layout": {
-                "visibility": "none"
-              },
-              "source": "search-layer-source",
-              "source-layer": "search_layer"
+                "paint": {
+                    "circle-color": "#fa6003",
+                    "circle-radius": 5,
+                    "circle-opacity": 1
+                },
+                minzoom: ZOOM_THRESHOLD
             }
         ];
-        this.searchQueryId = params.searchQueryId;
+        this.searchQueryId = params.searchQueryId || ko.observable();
         this.searchQueryId.subscribe(function (searchId) {
             if (searchId) {
                 self.addSearchLayer(searchId);
-            } else {
-                // optionally, remove the search layer if searchId becomes undefined
+            } else if (ko.unwrap(self.map)) {
                 self.removeSearchLayer();
             }
         });
+
+        this.addClusterClickHandlers = function() {
+            const map = self.map();
+        
+            // Handle clicks on clusters
+            map.on('click', 'clusters', function(e) {
+                var features = map.queryRenderedFeatures(e.point, { layers: ['clusters'] });
+                var feature = features[0];
+                var count = feature.properties.count;
+        
+                if (count > 1) {
+                    // Zoom in on the cluster
+                    var coordinates = feature.geometry.coordinates.slice();
+                    map.easeTo({
+                        center: coordinates,
+                        zoom: map.getZoom() + 2
+                    });
+                } else {
+                    // For count == 1, show a popup
+                    self.onFeatureClick(features, e.lngLat, mapboxgl);
+                }
+            });
+        
+            // Change the cursor to a pointer when over clusters and unclustered points
+            map.on('mouseenter', 'clusters', function() {
+                map.getCanvas().style.cursor = 'pointer';
+            });
+            map.on('mouseleave', 'clusters', function() {
+                map.getCanvas().style.cursor = '';
+            });
+            map.on('mouseenter', 'unclustered-point', function() {
+                map.getCanvas().style.cursor = 'pointer';
+            });
+            map.on('mouseleave', 'unclustered-point', function() {
+                map.getCanvas().style.cursor = '';
+            });
+        };
+        
 
         this.addSearchLayer = function (searchId) {
             console.log(searchId);
             if (!self.map())
                 return;
-            const tileUrlTemplate = `http://localhost:8000/search-layer/{z}/{x}/{y}.pbf?searchid=${encodeURIComponent(searchId)}`;
-
+            const tileUrlTemplate = `${window.location.origin}/search-layer/{z}/{x}/{y}.pbf?searchid=${encodeURIComponent(searchId)}`;
+        
             // Remove existing source and layer if they exist
             searchLayerIds.forEach(layerId => {
                 if (self.map().getLayer(layerId)) {
                     self.map().removeLayer(layerId);
                 }
-                if (self.map().getSource(layerId)) {
-                    self.map().removeSource(layerId);
-                }
             });
             if (self.map().getSource('search-layer-source')) {
                 self.map().removeSource('search-layer-source');
             }
-
+        
             // Add the vector tile source
             self.map().addSource('search-layer-source', {
                 type: 'vector',
@@ -246,12 +175,13 @@ define([
                 minzoom: 0,
                 maxzoom: 22,
             });
-
+        
             // Add the layer to display the data
             searchLayerDefinitions.forEach(mapLayer => {
                 self.map().addLayer(mapLayer);
             });
 
+            self.addClusterClickHandlers();
             // Optionally, fit the map to the data bounds
             // self.fitMapToDataBounds(searchId);
         };
@@ -316,7 +246,6 @@ define([
             if (ko.unwrap(params.bounds)) {
                 map.fitBounds(ko.unwrap(params.bounds), boundingOptions);
             }
-
             // If searchQueryId is already available, add the search layer
             if (self.searchQueryId()) {
                 self.addSearchLayer(self.searchQueryId());
