@@ -505,6 +505,7 @@ class Aggregation(Dsl):
         self.script = kwargs.pop("script", None)
         self.type = kwargs.pop("type", None)
         self.size = kwargs.pop("size", None)
+        self.filter = kwargs.pop("filter", None)  # Extract 'filter' from kwargs
 
         if self.field is not None and self.script is not None:
             raise AggregationDSLException(
@@ -517,23 +518,34 @@ class Aggregation(Dsl):
         if self.type is None:
             raise AggregationDSLException(_("You need to specify an aggregation type"))
 
-        self.agg = {self.name: {self.type: {}}}
+        # Initialize the aggregation dictionary
+        self.agg = {self.name: {}}
 
-        if self.field is not None:
-            self.agg[self.name][self.type]["field"] = self.field
-        elif self.script is not None:
-            self.agg[self.name][self.type]["script"] = self.script
+        if self.type == "filter":
+            if self.filter is None:
+                raise AggregationDSLException(
+                    _("You need to specify 'filter' for a filter aggregation")
+                )
+            # For filter aggregation, place the filter content directly
+            self.agg[self.name][self.type] = self.filter
+        else:
+            self.agg[self.name][self.type] = {}
 
-        self.set_size(self.size)
+            if self.field is not None:
+                self.agg[self.name][self.type]["field"] = self.field
+            elif self.script is not None:
+                self.agg[self.name][self.type]["script"] = self.script
 
-        for key in kwargs:
-            self.agg[self.name][self.type][key] = kwargs.get(key, None)
+            self.set_size(self.size)
+
+            # Set other keyword arguments
+            for key in kwargs:
+                self.agg[self.name][self.type][key] = kwargs.get(key, None)
 
     def add_aggregation(self, agg=None):
         if agg is not None:
             if "aggs" not in self.agg[self.name]:
                 self.agg[self.name]["aggs"] = {}
-
             self.agg[self.name]["aggs"][agg.name] = agg.agg[agg.name]
 
     def set_size(self, size):
@@ -556,6 +568,18 @@ class GeoHashGridAgg(Aggregation):
         self.precision = kwargs.get("precision", 5)
         super(GeoHashGridAgg, self).__init__(type="geohash_grid", **kwargs)
 
+        self.agg[self.name][self.type]["precision"] = self.precision
+
+
+class GeoTileGridAgg(Aggregation):
+    """
+    https://www.elastic.co/guide/en/elasticsearch/reference/current/search-aggregations-bucket-geotilegrid-aggregation.html
+
+    """
+
+    def __init__(self, **kwargs):
+        self.precision = kwargs.get("precision", 5)
+        super(GeoTileGridAgg, self).__init__(type="geotile_grid", **kwargs)
         self.agg[self.name][self.type]["precision"] = self.precision
 
 
@@ -701,16 +725,14 @@ class NestedAgg(Aggregation):
     """
 
     def __init__(self, **kwargs):
-        self.aggregation = kwargs.pop("agg", {})
+        # self.aggregation = kwargs.pop("agg", {})
         self.path = kwargs.pop("path", None)
         if self.path is None:
             raise NestedAggDSLException(
                 _("You need to specify a path for your nested aggregation")
             )
-        super(NestedAgg, self).__init__(type="nested", path=self.path, **kwargs)
-
-        if self.name:
-            self.agg[self.name]["aggs"] = self.aggregation
+        super(NestedAgg, self).__init__(type="nested", **kwargs)
+        self.agg[self.name][self.type]["path"] = self.path
 
 
 class NestedAggDSLException(Exception):
