@@ -2219,30 +2219,119 @@ class ResourceInstanceDataType(BaseDataType):
         return terms
 
     def transform_value_for_tile(self, value, **kwargs):
-        try:
-            uuid.UUID(value)
-            return [
-                {
-                    "resourceId": str(value),
+        # kwargs config looks like this:
+        # {
+        #     "graphs": [
+        #         {
+        #             "name": "Person or Group",
+        #             "graphid": "ccbd1537-ac5e-11e6-84a5-026d961c88e6",
+        #             "relationshipConcept": "6f26aa04-52af-4b17-a656-674c547ade2a",
+        #             "relationshipCollection": "00000000-0000-0000-0000-000000000005",
+        #             "useOntologyRelationship": False,
+        #             "inverseRelationshipConcept": "6f26aa04-52af-4b17-a656-674c547ade2a"
+        #         }
+        #     ],
+        #     "searchDsl": "",
+        #     "searchString": ""
+        # }
+        from arches.app.search.search_engine_factory import SearchEngineFactory
+
+        relatable_graphs = kwargs.get("graphs", [])
+        default_values_lookup = dict()
+        for graph in relatable_graphs:
+            if graph.get("useOntologyRelationship", False):
+                default_values_lookup[graph["graphid"]] = {
                     "ontologyProperty": "",
                     "inverseOntologyProperty": "",
-                    "resourceXresourceId": str(uuid.uuid4()),
                 }
-            ]
-        except ValueError:
-            print("not a uuid")
-        try:
-            return json.loads(value)
-        except ValueError:
-            # do this if json (invalid) is formatted with single quotes, re #6390
-            try:
-                return ast.literal_eval(value)
-            except:
-                return value
-        except TypeError:
-            # data should come in as json but python list is accepted as well
-            if isinstance(value, list):
-                return value
+            else:
+                default_values_lookup[graph["graphid"]] = {
+                    "ontologyProperty": graph["relationshipConcept"],
+                    "inverseOntologyProperty": graph["inverseRelationshipConcept"],
+                }
+
+        subtypes_dict = {"uuid": uuid.UUID, "dict": dict, "str": str}
+
+        if isinstance(value, str):
+            for test_method in [uuid.UUID, json.loads, ast.literal_eval]:
+                try:
+                    converted_value = test_method(value)
+                except:
+                    converted_value = False
+                if converted_value is not False:
+                    break
+            if converted_value is False:
+                return []
+        else:
+            converted_value = value
+
+        value_type = None
+        for value_subtype_label, value_subtype_class in list(subtypes_dict.items()):
+            if not isinstance(converted_value, list):
+                converted_value = [converted_value]
+
+            if isinstance(converted_value[0], value_subtype_class):
+                value_type = value_subtype_label
+                break
+
+        se = SearchEngineFactory().create()
+        query = Query(se)
+        query.include("graph_id")
+        boolquery = Bool()
+        transformed_value = []
+
+        match value_type:
+            case "str":  # aka legacyid
+                # query the graphid associated with each resourceinstance.legacyid
+                boolquery.filter(Terms(field="legacyid", terms=converted_value))
+                query.add_query(boolquery)
+                results = query.search(index=RESOURCES_INDEX)
+                for hit in results["hits"]["hits"]:
+                    resource_instance_object = {}
+                    resource_instance_object["resourceId"] = hit["_id"]
+                    resource_instance_object["ontologyProperty"] = (
+                        default_values_lookup[hit["_source"]["graph_id"]][
+                            "ontologyProperty"
+                        ]
+                    )
+                    resource_instance_object["inverseOntologyProperty"] = (
+                        default_values_lookup[hit["_source"]["graph_id"]][
+                            "inverseOntologyProperty"
+                        ]
+                    )
+                    resource_instance_object["resourceXresourceId"] = str(uuid.uuid4())
+                    transformed_value.append(resource_instance_object)
+
+            case "uuid":
+                # query the graphid associated with each resourceinstance.resourceinstanceid
+                results = query.search(
+                    index=RESOURCES_INDEX, id=[str(val) for val in converted_value]
+                )
+                for hit in results["hits"]["hits"]:
+                    resource_instance_object = {}
+                    resource_instance_object["resourceId"] = hit["_id"]
+                    resource_instance_object["ontologyProperty"] = (
+                        default_values_lookup[hit["_source"]["graph_id"]][
+                            "ontologyProperty"
+                        ]
+                    )
+                    resource_instance_object["inverseOntologyProperty"] = (
+                        default_values_lookup[hit["_source"]["graph_id"]][
+                            "inverseOntologyProperty"
+                        ]
+                    )
+                    resource_instance_object["resourceXresourceId"] = str(uuid.uuid4())
+                    transformed_value.append(resource_instance_object)
+
+            case "dict":  # assume data correctly formatted
+                for val in converted_value:
+                    try:
+                        uuid.UUID(val["resourceId"])
+                    except:
+                        continue
+                    transformed_value.append(val)
+
+        return transformed_value
 
     def transform_export_values(self, value, *args, **kwargs):
         return json.dumps(value)
