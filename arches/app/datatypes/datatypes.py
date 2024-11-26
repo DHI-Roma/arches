@@ -2261,7 +2261,8 @@ class ResourceInstanceDataType(BaseDataType):
                     converted_value = False
 
             if converted_value is False and value != "":
-                converted_value = value  # is a string, likely legacyid
+                converted_value = value.split(",")  # is a string, likely legacyid
+                converted_value = [val.strip() for val in converted_value if val]
             elif converted_value is False:
                 logger.warning("ResourceInstanceDataType: value is empty")
                 return []
