@@ -2256,11 +2256,14 @@ class ResourceInstanceDataType(BaseDataType):
             for test_method in [uuid.UUID, json.loads, ast.literal_eval]:
                 try:
                     converted_value = test_method(value)
+                    break
                 except:
                     converted_value = False
-                if converted_value is not False:
-                    break
-            if converted_value is False:
+
+            if converted_value is False and value != "":
+                converted_value = value  # is a string, likely legacyid
+            elif converted_value is False:
+                logger.warning("ResourceInstanceDataType: value is empty")
                 return []
         else:
             converted_value = value
