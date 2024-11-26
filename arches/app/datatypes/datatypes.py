@@ -2269,10 +2269,9 @@ class ResourceInstanceDataType(BaseDataType):
             converted_value = value
 
         value_type = None
+        if not isinstance(converted_value, list):
+            converted_value = [converted_value]
         for value_subtype_label, value_subtype_class in list(subtypes_dict.items()):
-            if not isinstance(converted_value, list):
-                converted_value = [converted_value]
-
             if isinstance(converted_value[0], value_subtype_class):
                 value_type = value_subtype_label
                 break
@@ -2286,7 +2285,9 @@ class ResourceInstanceDataType(BaseDataType):
         match value_type:
             case "str":  # aka legacyid
                 # query the graphid associated with each resourceinstance.legacyid
-                boolquery.filter(Terms(field="legacyid", terms=converted_value))
+                boolquery.must(
+                    Terms(field="legacyid.keyword", terms=converted_value)
+                )  # exact match on keyword
                 query.add_query(boolquery)
                 results = query.search(index=RESOURCES_INDEX)
                 for hit in results["hits"]["hits"]:
