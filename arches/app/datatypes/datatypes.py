@@ -2305,7 +2305,6 @@ class ResourceInstanceDataType(BaseDataType):
 
         match value_type:
             case "str":  # aka legacyid
-                # query the graphid associated with each resourceinstance.legacyid
                 boolquery.must(
                     Terms(field="legacyid.keyword", terms=converted_value)
                 )  # exact match on keyword
@@ -2315,14 +2314,13 @@ class ResourceInstanceDataType(BaseDataType):
                     transformed_value.append(build_resource_instance_object(hit))
 
             case "uuid":
-                # query the graphid associated with each resourceinstance.resourceinstanceid
                 results = query.search(
                     index=RESOURCES_INDEX, id=[str(val) for val in converted_value]
                 )
                 for hit in results["docs"]:
                     transformed_value.append(build_resource_instance_object(hit))
 
-            case "dict":  # assume data correctly formatted
+            case "dict":  # assume data correctly parsed via ast.literal
                 for val in converted_value:
                     try:
                         uuid.UUID(val["resourceId"])
