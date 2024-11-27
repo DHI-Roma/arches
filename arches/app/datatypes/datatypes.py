@@ -2250,6 +2250,22 @@ class ResourceInstanceDataType(BaseDataType):
                     "inverseOntologyProperty": graph["inverseRelationshipConcept"],
                 }
 
+        def build_resource_instance_object(hit):
+            return {
+                "resourceId": hit["_id"],
+                "ontologyProperty": (
+                    default_values_lookup[hit["_source"]["graph_id"]][
+                        "ontologyProperty"
+                    ]
+                ),
+                "inverseOntologyProperty": (
+                    default_values_lookup[hit["_source"]["graph_id"]][
+                        "inverseOntologyProperty"
+                    ]
+                ),
+                "resourceXresourceId": str(uuid.uuid4()),
+            }
+
         subtypes_dict = {"uuid": uuid.UUID, "dict": dict, "str": str}
 
         if isinstance(value, str):
@@ -2263,6 +2279,10 @@ class ResourceInstanceDataType(BaseDataType):
             if converted_value is False and value != "":
                 converted_value = value.split(",")  # is a string, likely legacyid
                 converted_value = [val.strip() for val in converted_value if val]
+                try:
+                    converted_value = [uuid.UUID(val) for val in converted_value]
+                except:
+                    pass
             elif converted_value is False:
                 logger.warning("ResourceInstanceDataType: value is empty")
                 return []
@@ -2292,41 +2312,15 @@ class ResourceInstanceDataType(BaseDataType):
                 query.add_query(boolquery)
                 results = query.search(index=RESOURCES_INDEX)
                 for hit in results["hits"]["hits"]:
-                    resource_instance_object = {}
-                    resource_instance_object["resourceId"] = hit["_id"]
-                    resource_instance_object["ontologyProperty"] = (
-                        default_values_lookup[hit["_source"]["graph_id"]][
-                            "ontologyProperty"
-                        ]
-                    )
-                    resource_instance_object["inverseOntologyProperty"] = (
-                        default_values_lookup[hit["_source"]["graph_id"]][
-                            "inverseOntologyProperty"
-                        ]
-                    )
-                    resource_instance_object["resourceXresourceId"] = str(uuid.uuid4())
-                    transformed_value.append(resource_instance_object)
+                    transformed_value.append(build_resource_instance_object(hit))
 
             case "uuid":
                 # query the graphid associated with each resourceinstance.resourceinstanceid
                 results = query.search(
                     index=RESOURCES_INDEX, id=[str(val) for val in converted_value]
                 )
-                for hit in results["hits"]["hits"]:
-                    resource_instance_object = {}
-                    resource_instance_object["resourceId"] = hit["_id"]
-                    resource_instance_object["ontologyProperty"] = (
-                        default_values_lookup[hit["_source"]["graph_id"]][
-                            "ontologyProperty"
-                        ]
-                    )
-                    resource_instance_object["inverseOntologyProperty"] = (
-                        default_values_lookup[hit["_source"]["graph_id"]][
-                            "inverseOntologyProperty"
-                        ]
-                    )
-                    resource_instance_object["resourceXresourceId"] = str(uuid.uuid4())
-                    transformed_value.append(resource_instance_object)
+                for hit in results["docs"]:
+                    transformed_value.append(build_resource_instance_object(hit))
 
             case "dict":  # assume data correctly formatted
                 for val in converted_value:
