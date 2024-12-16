@@ -43,5 +43,13 @@ class Command(BaseCommand):
         print("operation: " + options["operation"])
         if options["operation"] == "build":
             if settings.STATIC_ROOT != "":
-                subprocess.call("npm run build_production", shell=True)
-                management.call_command("collectstatic", interactive=False)
+                result = subprocess.run(
+                    "npm run build_production",
+                    shell=True,
+                )
+
+                if result.returncode == 0:
+                    print("Build successful, running collectstatic...")
+                    management.call_command("collectstatic", interactive=False)
+                else:
+                    print("Build failed!")
