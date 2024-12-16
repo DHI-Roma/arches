@@ -35,7 +35,7 @@ def list_arches_app_names():
 
 def list_arches_app_paths():
     return [
-        config.module.__path__[0]
+        os.path.realpath(config.module.__path__[0])
         for config in apps.get_app_configs()
         if getattr(config, "is_arches_application", False)
     ]
