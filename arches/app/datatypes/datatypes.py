@@ -2239,7 +2239,9 @@ class ResourceInstanceDataType(BaseDataType):
         relatable_graphs = kwargs.get("graphs", [])
         default_values_lookup = dict()
         for graph in relatable_graphs:
-            if graph.get("useOntologyRelationship", False):
+            if graph.get("useOntologyRelationship", False) or not graph.get(
+                "relationshipConcept", None
+            ):
                 default_values_lookup[graph["graphid"]] = {
                     "ontologyProperty": "",
                     "inverseOntologyProperty": "",
