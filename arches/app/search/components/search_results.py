@@ -107,7 +107,7 @@ class SearchResultsFilter(BaseSearchFilter):
             self.request, "geojson-feature-collection", "read_nodegroup"
         )
 
-        results = permission_backend.get_search_ui_permissions_bulk(
+        results = permission_backend.get_search_ui_permissions(
             self.request.user, response_object["results"]["hits"]["hits"], groups
         )
 
