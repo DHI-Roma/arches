@@ -46,16 +46,28 @@ class SearchResultsExporter(object):
     def __init__(self, search_request=None):
         if search_request is None:
             raise Exception("Need to pass in a search request")
-        search_request.GET = search_request.GET.copy()
-        search_request.GET["tiles"] = True
-        search_request.GET["export"] = True
-        self.report_link = search_request.GET.get("reportlink", False)
-        self.format = search_request.GET.get("format", "tilecsv")
-        self.export_system_values = get_str_kwarg_as_bool(
-            "exportsystemvalues", search_request.GET
-        )
-        self.compact = search_request.GET.get("compact", True)
-        self.precision = int(search_request.GET.get("precision", 5))
+        if self.request.method == "GET":
+            search_request.GET = search_request.GET.copy()
+            search_request.GET["tiles"] = True
+            search_request.GET["export"] = True
+            self.report_link = search_request.GET.get("reportlink", False)
+            self.format = search_request.GET.get("format", "tilecsv")
+            self.export_system_values = get_str_kwarg_as_bool(
+                "exportsystemvalues", search_request.GET
+            )
+            self.compact = search_request.GET.get("compact", True)
+            self.precision = int(search_request.GET.get("precision", 5))
+        else:
+            search_request.POST = search_request.POST.copy()
+            search_request.POST["tiles"] = True
+            search_request.POST["export"] = True
+            self.report_link = search_request.POST.get("reportlink", False)
+            self.format = search_request.POST.get("format", "tilecsv")
+            self.export_system_values = get_str_kwarg_as_bool(
+                "exportsystemvalues", search_request.POST
+            )
+            self.compact = search_request.POST.get("compact", True)
+            self.precision = int(search_request.POST.get("precision", 5))
         if self.format == "shp" and self.compact is not True:
             raise Exception("Results must be compact to export to shapefile")
         self.search_request = search_request
