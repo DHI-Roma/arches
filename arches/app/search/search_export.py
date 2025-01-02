@@ -46,7 +46,7 @@ class SearchResultsExporter(object):
     def __init__(self, search_request=None):
         if search_request is None:
             raise Exception("Need to pass in a search request")
-        if self.request.method == "GET":
+        if search_request.method == "GET":
             search_request.GET = search_request.GET.copy()
             search_request.GET["tiles"] = True
             search_request.GET["export"] = True
