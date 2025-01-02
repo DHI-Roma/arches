@@ -140,10 +140,7 @@ class PermissionFramework(metaclass=ABCMeta):
     def get_permission_search_filter(self, user): ...
 
     @abstractmethod
-    def get_search_ui_permissions(self, user, search_result, groups=None): ...
-
-    @abstractmethod
-    def get_search_ui_permissions_bulk(self, user, search_results, groups=None): ...
+    def get_search_ui_permissions(self, user, search_results, groups=None): ...
 
     @abstractmethod
     def get_default_permissions(user_or_group, model): ...
@@ -394,14 +391,8 @@ def get_permission_inclusions():
     return _get_permission_framework().get_permission_inclusions()
 
 
-def get_search_ui_permissions(user, search_result, groups=None):
+def get_search_ui_permissions(user, search_results, groups=None):
     return _get_permission_framework().get_search_ui_permissions(
-        user, search_result, groups
-    )
-
-
-def get_search_ui_permissions_bulk(user, search_results, groups=None):
-    return _get_permission_framework().get_search_ui_permissions_bulk(
         user, search_results, groups
     )
 
