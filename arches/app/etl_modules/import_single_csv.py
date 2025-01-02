@@ -14,7 +14,13 @@ from django.db.models.functions import Lower
 from django.http import HttpRequest
 from django.utils.translation import gettext as _
 from arches.app.datatypes.datatypes import DataTypeFactory
-from arches.app.models.models import ETLModule, GraphModel, Node, NodeGroup
+from arches.app.models.models import (
+    ETLModule,
+    GraphModel,
+    Node,
+    NodeGroup,
+    ResourceInstance,
+)
 from arches.app.models.system_settings import settings
 import arches.app.tasks as tasks
 from arches.app.utils.betterJSONSerializer import JSONSerializer
@@ -397,10 +403,24 @@ class ImportSingleCsv(BaseImportModule):
                 for row in reader:
                     if id_label in fieldnames:
                         id_index = fieldnames.index(id_label)
-                        try:
-                            resourceid = uuid.UUID(row[id_index])
-                            legacyid = None
-                        except (AttributeError, ValueError):
+                        # try:
+                        #     resourceid = uuid.UUID(row[id_index])
+                        #     legacyid = None
+                        # except (AttributeError, ValueError):
+                        #     resourceid = uuid.uuid4()
+                        #     legacyid = row[id_index]
+                        try:  # check for pre-existing resource keyed on the legacyid
+                            resource = ResourceInstance.objects.get(
+                                legacyid=row[id_index]
+                            )
+                            resourceid = resource.resourceinstanceid
+                            legacyid = row[id_index]
+                        except Exception as e:
+                            print(
+                                "no pre-existing resource found for legacyid",
+                                row[id_index],
+                            )
+                            print(e)
                             resourceid = uuid.uuid4()
                             legacyid = row[id_index]
                     else:
