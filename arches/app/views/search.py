@@ -25,6 +25,7 @@ from django.db import connection
 from django.http import Http404
 from django.shortcuts import render
 from django.utils.translation import gettext as _
+from django.views.decorators.csrf import csrf_exempt
 from arches.app.models.models import (
     MapMarker,
     GraphModel,
@@ -349,6 +350,7 @@ def get_dsl_from_search_string(request):
     return JSONResponse(dsl)
 
 
+@csrf_exempt
 def search_results(request, returnDsl=False):
     search_filter_factory = SearchFilterFactory(request)
     searchview_component_instance = search_filter_factory.get_searchview_instance()
