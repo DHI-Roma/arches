@@ -30,6 +30,7 @@ from arches.app.utils.permission_backend import (
     get_resource_types_by_perm,
     user_can_read_map_layers,
 )
+from arches.app.utils.mobile import mobile
 
 
 class BaseManagerView(TemplateView):
@@ -95,6 +96,7 @@ class BaseManagerView(TemplateView):
         )
         context["app_name"] = settings.APP_NAME
         context["show_language_swtich"] = settings.SHOW_LANGUAGE_SWITCH
+        context["mobile"] = mobile(self.request)
         return context
 
 
