@@ -159,6 +159,12 @@ def generate_frontend_configuration():
             "ARCHES_APPLICATIONS_PATHS": path_lookup,
             "SITE_PACKAGES_DIRECTORY": site.getsitepackages()[0],
             "PUBLIC_SERVER_ADDRESS": settings.PUBLIC_SERVER_ADDRESS,
+            "WEBPACK_SERVER_ADDRESS": (
+                settings.WEBPACK_SERVER_ADDRESS
+                if hasattr(settings, "WEBPACK_SERVER_ADDRESS")
+                and settings.WEBPACK_SERVER_ADDRESS
+                else settings.PUBLIC_SERVER_ADDRESS
+            ),
             "ROOT_DIR": root_dir_path,
             "STATIC_URL": settings.STATIC_URL,
             "WEBPACK_DEVELOPMENT_SERVER_PORT": settings.WEBPACK_DEVELOPMENT_SERVER_PORT,
