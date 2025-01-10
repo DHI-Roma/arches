@@ -4,6 +4,7 @@ const Path = require('path');
 const TerserPlugin = require("terser-webpack-plugin");
 const Webpack = require('webpack');
 const { merge } = require('webpack-merge');
+const { WebpackManifestPlugin } = require('webpack-manifest-plugin');
 
 const commonWebpackConfigPromise = require('./webpack.common.js');
 
@@ -32,6 +33,17 @@ module.exports = () => {
                 plugins: [
                     new Webpack.DefinePlugin({
                         'process.env.NODE_ENV': JSON.stringify('production'),
+                    }),
+                    new WebpackManifestPlugin({
+                        fileName: 'manifest.json',
+                        publicPath: commonWebpackConfig.STATIC_URL,
+                        generate: (seed, files) => {
+                            const manifest = {};
+                            files.forEach(file => {
+                                manifest[file.name] = file.path;
+                            });
+                            return manifest;
+                        },
                     }),
                 ],
             }));
