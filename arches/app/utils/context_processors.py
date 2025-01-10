@@ -17,12 +17,16 @@ along with this program. If not, see <http://www.gnu.org/licenses/>.
 """
 
 import json
+import logging
+import os
 from arches import __version__
 from arches.app.models.models import GroupMapSettings, Language
 from arches.app.models.system_settings import settings
 from arches.app.utils.geo_utils import GeoUtils
 from arches.app.utils.betterJSONSerializer import JSONSerializer
 from django.utils.translation import get_language, get_language_bidi
+
+logger = logging.getLogger(__name__)
 
 
 def livereload(request):
@@ -109,3 +113,21 @@ def app_settings(request=None):
             "DEBUG": settings.DEBUG,
         }
     }
+
+
+def webpack_manifest(request):
+    """
+    Loads the webpack manifest.json and adds it to the template context.
+    """
+    manifest_path = os.path.join(
+        settings.STATIC_ROOT, settings.STATIC_URL, "build", "manifest.json"
+    )
+    manifest = {}
+
+    if os.path.exists(manifest_path):
+        with open(manifest_path, "r") as f:
+            manifest = json.load(f)
+    else:
+        logger.warning("Webpack manifest not found at %s", manifest_path)
+
+    return {"webpack_manifest": manifest}
