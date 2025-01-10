@@ -136,9 +136,8 @@ class GetFrontendI18NData(APIBase):
         localized_strings = {}
         for lang_file in language_file_path:
             try:
-                localized_strings = (
-                    json.load(open(lang_file))[user_language] | localized_strings
-                )
+                with open(lang_file, "r", encoding="utf-8") as f:
+                    localized_strings = json.load(f)[user_language] | localized_strings
             except FileNotFoundError:
                 pass
 
