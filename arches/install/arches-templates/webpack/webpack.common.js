@@ -20,14 +20,14 @@ module.exports = () => {
         const parsedData = JSON.parse(rawData);
 
         console.log('Data imported from .frontend-configuration-settings.json:', parsedData);
-    
+
         global.APP_ROOT = parsedData['APP_ROOT'];
         global.ARCHES_APPLICATIONS = parsedData['ARCHES_APPLICATIONS'];
         global.ARCHES_APPLICATIONS_PATHS = parsedData['ARCHES_APPLICATIONS_PATHS'];
         global.SITE_PACKAGES_DIRECTORY = parsedData['SITE_PACKAGES_DIRECTORY'];
         global.ROOT_DIR = parsedData['ROOT_DIR'];
         global.STATIC_URL = parsedData['STATIC_URL'];
-        global.PUBLIC_SERVER_ADDRESS = parsedData['PUBLIC_SERVER_ADDRESS'];
+        global.WEBPACK_SERVER_ADDRESS = parsedData['WEBPACK_SERVER_ADDRESS'];
         global.WEBPACK_DEVELOPMENT_SERVER_PORT = parsedData['WEBPACK_DEVELOPMENT_SERVER_PORT'];
 
         // END get data from `.frontend-configuration-settings.json`
@@ -290,9 +290,9 @@ module.exports = () => {
                     jquery: Path.resolve(__dirname, PROJECT_RELATIVE_NODE_MODULES_PATH, 'jquery', 'dist', 'jquery.min')
                 }),
                 new MiniCssExtractPlugin(),
-                new BundleTracker({ 
+                new BundleTracker({
                     path: Path.resolve(__dirname),
-                    filename: 'webpack-stats.json' 
+                    filename: 'webpack-stats.json'
                 }),
                 new VueLoaderPlugin(),
             ],
@@ -441,16 +441,16 @@ module.exports = () => {
 
                                 const renderTemplate = async (failureCount = 0) => {
                                     /*
-                                        Sometimes Django can choke on the number of requests, this function will 
+                                        Sometimes Django can choke on the number of requests, this function will
                                         continue attempting to render the template until successful or 5 failures.
                                     */
                                     if (failureCount < 5) {
                                         try {
-                                            let serverAddress = PUBLIC_SERVER_ADDRESS;
+                                            let serverAddress = WEBPACK_SERVER_ADDRESS;
                                             if (serverAddress.charAt(serverAddress.length - 1) === '/') {
                                                 serverAddress = serverAddress.slice(0, -1)
                                             }
-                                            
+
                                             resp = await fetch(serverAddress + templatePath);
 
                                             if (resp.status === 500) {
