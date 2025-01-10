@@ -6,6 +6,7 @@ const Path = require('path');
 const webpack = require('webpack');
 const MiniCssExtractPlugin = require('mini-css-extract-plugin');
 const BundleTracker = require('webpack-bundle-tracker');
+const { WebpackManifestPlugin } = require('webpack-manifest-plugin');
 
 const { CleanWebpackPlugin } = require('clean-webpack-plugin');
 const { VueLoaderPlugin } = require("vue-loader");
@@ -40,6 +41,18 @@ module.exports = () => {
         else {
             PROJECT_RELATIVE_NODE_MODULES_PATH = Path.resolve(APP_ROOT, '..', 'node_modules');
         }
+
+        const manifestPlugin = new WebpackManifestPlugin({
+            fileName: 'manifest.json',
+            publicPath: global.STATIC_URL,
+            generate: (seed, files) => {
+                const manifest = {};
+                files.forEach(file => {
+                    manifest[file.name] = file.path;
+                });
+                return manifest;
+            },
+        });
 
         // END workaround for handling node_modules paths in arches-core vs projects
         // BEGIN create entry point configurations
@@ -277,7 +290,7 @@ module.exports = () => {
                 assetModuleFilename: 'img/[hash][ext][query]',
             },
             plugins: [
-                new CleanWebpackPlugin(),
+                new CleanWebpackPlugin({cleanOnceBeforeBuildPatterns: ['**/*', '!manifest.json'],}),
                 new webpack.DefinePlugin(universalConstants),
                 new webpack.DefinePlugin({
                     __VUE_OPTIONS_API__: 'true',
@@ -295,6 +308,7 @@ module.exports = () => {
                     filename: 'webpack-stats.json' 
                 }),
                 new VueLoaderPlugin(),
+                manifestPlugin,
             ],
             resolveLoader: {
                 alias: {
