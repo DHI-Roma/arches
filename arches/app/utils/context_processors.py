@@ -119,15 +119,19 @@ def webpack_manifest(request):
     """
     Loads the webpack manifest.json and adds it to the template context.
     """
-    manifest_path = os.path.join(
-        settings.STATIC_ROOT, settings.STATIC_URL, "build", "manifest.json"
-    )
+    manifest_path = os.path.join(settings.APP_ROOT, "media/build", "manifest.json")
     manifest = {}
 
-    if os.path.exists(manifest_path):
-        with open(manifest_path, "r") as f:
-            manifest = json.load(f)
-    else:
-        logger.warning("Webpack manifest not found at %s", manifest_path)
+    logger.warning(f"Looking for manifest.json at: {manifest_path}")
 
-    return {"webpack_manifest": manifest}
+    if os.path.exists(manifest_path):
+        try:
+            with open(manifest_path, "r") as f:
+                manifest = json.load(f)
+            logger.warning(f"Loaded manifest.json with {len(manifest)} entries.")
+        except json.JSONDecodeError:
+            logger.error("Failed to decode manifest.json.")
+    else:
+        logger.warning(f"Manifest file not found at {manifest_path}.")
+
+    return manifest
