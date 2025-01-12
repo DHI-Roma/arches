@@ -30,6 +30,7 @@ from arches.app.utils.permission_backend import (
     get_resource_types_by_perm,
     user_can_read_map_layers,
 )
+from arches.app.utils.context_processors import webpack_manifest
 
 
 class BaseManagerView(TemplateView):
@@ -93,6 +94,12 @@ class BaseManagerView(TemplateView):
             )
             > 0
         )
+        context["webpack_manifest"] = webpack_manifest(self.request)
+        main_script = kwargs.get("main_script", None)
+        if main_script:
+            context["main_script_webpack_asset"] = context["webpack_manifest"].get(
+                f"{main_script}.js", ""
+            )
         context["app_name"] = settings.APP_NAME
         context["show_language_swtich"] = settings.SHOW_LANGUAGE_SWITCH
         return context
