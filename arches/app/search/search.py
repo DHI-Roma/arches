@@ -23,8 +23,7 @@ import uuid
 import logging
 import warnings
 from datetime import datetime
-from elasticsearch import Elasticsearch, helpers, ElasticsearchWarning
-import elasticsearch
+from elasticsearch import Elasticsearch, helpers, ElasticsearchWarning, NotFoundError
 from elasticsearch.exceptions import RequestError
 from elasticsearch.helpers import BulkIndexError
 from arches.app.models.system_settings import settings
@@ -95,7 +94,7 @@ class SearchEngine(object):
             )
         except KeyError:
             return False
-        except elasticsearch.NotFoundError:
+        except NotFoundError:
             return False
 
     def restore_snapshot(self, repository, snapshot, **kwargs):
