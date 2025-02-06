@@ -98,8 +98,18 @@ class SearchEngine(object):
             return False
 
     def restore_snapshot(self, repository, snapshot, **kwargs):
-        return self.es.snapshot.restore(
-            repository=repository, snapshot=snapshot, **kwargs
+        print(
+            self.es.snapshot.restore(
+                repository=repository,
+                snapshot=snapshot,
+                wait_for_completion=True,
+                **kwargs,
+            )
+        )
+
+    def get_snapshot(self, repository_name, snapshot_name, **kwargs):
+        return self.es.snapshot.get(
+            repository=repository_name, snapshot=snapshot_name, **kwargs
         )
 
     def restore_status(self):

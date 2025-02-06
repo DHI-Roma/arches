@@ -278,7 +278,9 @@ class Command(BaseCommand):
                 recalculate_descriptors=options["recalculate_descriptors"],
             )
         if options["operation"] == "restore_snapshot":
-            self.restore_snapshot(options["repository_name"], options["snapshot_name"])
+            self.restore_snapshot(
+                options["repository_name"], options["snapshot_name"], options
+            )
         if options["operation"] == "create_snapshot":
             self.create_snapshot(options["repository_name"], options["snapshot_name"])
         if options["operation"] == "list_snapshots":
@@ -364,7 +366,7 @@ class Command(BaseCommand):
                 repository_name, snapshot_name
             )
 
-    def restore_snapshot(self, repository_name=None, snapshot_name=None):
+    def restore_snapshot(self, repository_name=None, snapshot_name=None, options=None):
         if not repository_name or not snapshot_name:
             print(
                 "Snapshot name and repository name are required.  Use -sn or --snapshot_name and -rn or --repository_name"
@@ -379,6 +381,22 @@ class Command(BaseCommand):
                 SearchEngineFactory().create().restore_snapshot(
                     repository_name, snapshot_name
                 )
+                if SearchEngineFactory().create().restore_status() == "done":
+                    snapshot_response = (
+                        SearchEngineFactory()
+                        .create()
+                        .get_snapshot(repository_name, snapshot_name)
+                    )
+                    index_database_util.index_resources_by_time(
+                        start_time=snapshot_response["snapshots"][0]["start_time"],
+                        batch_size=options["batch_size"],
+                        quiet=options["quiet"],
+                        use_multiprocessing=options["use_multiprocessing"],
+                        max_subprocesses=options["max_subprocesses"],
+                        recalculate_descriptors=options["recalculate_descriptors"],
+                    )
+                else:
+                    print("Snapshot restore failed, manual intervention required.")
             else:
                 print("Snapshot does not exist")
 
