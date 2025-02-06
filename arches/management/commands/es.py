@@ -377,7 +377,7 @@ class Command(BaseCommand):
             ):
                 self.delete_indexes()
                 SearchEngineFactory().create().restore_snapshot(
-                    snapshot_name, repository_name
+                    repository_name, snapshot_name
                 )
             else:
                 print("Snapshot does not exist")
