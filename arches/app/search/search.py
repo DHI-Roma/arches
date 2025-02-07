@@ -59,7 +59,10 @@ class SearchEngine(object):
             delta = dt - epoch_time
             snapshot = "{}_{}".format(settings.APP_NAME, int(delta.total_seconds()))
 
+        # all indices will be included in the snapshot except concepts - which needs to be
+        # built from scratch because there is no timestamping for concepts
         indices = self.get_index_names()
+        indices.remove(self._add_prefix(CONCEPTS_INDEX))
 
         return self.es.snapshot.create(
             repository=repository,
@@ -113,7 +116,9 @@ class SearchEngine(object):
         )
 
     def restore_status(self):
-        index_statuses = self.es.indices.recovery(index=self.get_index_names())
+        indices = self.get_index_names()
+        indices.remove(self._add_prefix(CONCEPTS_INDEX))
+        index_statuses = self.es.indices.recovery(index=indices)
         for key in index_statuses.keys():
             for shard in index_statuses[key]["shards"]:
                 if shard["stage"] != "DONE":

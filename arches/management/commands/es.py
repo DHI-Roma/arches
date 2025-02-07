@@ -387,6 +387,10 @@ class Command(BaseCommand):
                         .create()
                         .get_snapshot(repository_name, snapshot_name)
                     )
+                    prepare_concepts_index(create=True)
+                    index_database_util.index_concepts(
+                        batch_size=options["batch_size"],
+                    )
                     index_database_util.index_resources_by_time(
                         start_time=snapshot_response["snapshots"][0]["start_time"],
                         batch_size=options["batch_size"],
