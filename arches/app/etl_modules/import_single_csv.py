@@ -28,6 +28,9 @@ from arches.app.utils.file_validator import FileValidator
 from arches.app.etl_modules.base_import_module import BaseImportModule
 from arches.app.etl_modules.decorators import load_data_async
 from arches.app.etl_modules.save import save_to_tiles
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class ImportSingleCsv(BaseImportModule):
@@ -403,26 +406,27 @@ class ImportSingleCsv(BaseImportModule):
                 for row in reader:
                     if id_label in fieldnames:
                         id_index = fieldnames.index(id_label)
-                        # try:
-                        #     resourceid = uuid.UUID(row[id_index])
-                        #     legacyid = None
-                        # except (AttributeError, ValueError):
-                        #     resourceid = uuid.uuid4()
-                        #     legacyid = row[id_index]
-                        try:  # check for pre-existing resource keyed on the legacyid
-                            resource = ResourceInstance.objects.get(
-                                legacyid=row[id_index]
-                            )
-                            resourceid = resource.resourceinstanceid
+                        try:
+                            resourceid = uuid.UUID(row[id_index])
+                            legacyid = None
+                        except (AttributeError, ValueError) as ex:
+                            logger.info(f"id was not a valid UUID: {row[id_index]}")
                             legacyid = row[id_index]
-                        except Exception as e:
-                            print(
-                                "no pre-existing resource found for legacyid",
-                                row[id_index],
-                            )
-                            print(e)
-                            resourceid = uuid.uuid4()
-                            legacyid = row[id_index]
+                            try:  # check for pre-existing resource keyed on the legacyid
+                                resource = ResourceInstance.objects.get(
+                                    legacyid=legacyid
+                                )
+                                resourceid = resource.resourceinstanceid
+                                logger.info(
+                                    f"pre-existing resource ({resourceid}) found for legacyid {row[id_index]}"
+                                )
+                            except Exception as e:
+                                logger.warning(
+                                    "no pre-existing resource found for legacyid",
+                                    row[id_index],
+                                )
+                                resourceid = uuid.uuid4()
+                                legacyid = row[id_index]
                     else:
                         resourceid = uuid.uuid4()
                         legacyid = None
