@@ -42,18 +42,6 @@ module.exports = () => {
             PROJECT_RELATIVE_NODE_MODULES_PATH = Path.resolve(APP_ROOT, '..', 'node_modules');
         }
 
-        const manifestPlugin = new WebpackManifestPlugin({
-            fileName: 'manifest.json',
-            publicPath: global.STATIC_URL,
-            generate: (seed, files) => {
-                const manifest = {};
-                files.forEach(file => {
-                    manifest[file.name] = file.path;
-                });
-                return manifest;
-            },
-        });
-
         // END workaround for handling node_modules paths in arches-core vs projects
         // BEGIN create entry point configurations
 
@@ -308,7 +296,17 @@ module.exports = () => {
                     filename: 'webpack-stats.json' 
                 }),
                 new VueLoaderPlugin(),
-                manifestPlugin,
+                new WebpackManifestPlugin({
+                    fileName: 'manifest.json',
+                    publicPath: global.STATIC_URL,
+                    generate: (seed, files) => {
+                        const manifest = {};
+                        files.forEach(file => {
+                            manifest[file.name] = file.path;
+                        });
+                        return manifest;
+                    },
+                }),
             ],
             resolveLoader: {
                 alias: {
