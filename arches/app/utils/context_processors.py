@@ -24,6 +24,7 @@ from arches.app.models.models import GroupMapSettings, Language
 from arches.app.models.system_settings import settings
 from arches.app.utils.geo_utils import GeoUtils
 from arches.app.utils.betterJSONSerializer import JSONSerializer
+from django.http.response import Http404
 from django.utils.translation import get_language, get_language_bidi
 
 logger = logging.getLogger(__name__)
@@ -115,23 +116,25 @@ def app_settings(request=None):
     }
 
 
-def webpack_manifest(request):
+def webpack_asset(file_alias, request=None):
     """
-    Loads the webpack manifest.json and adds it to the template context.
+    Looks up webpack asset path name (including file hash) from the webpack manifest.json
     """
-    manifest_path = os.path.join(settings.APP_ROOT, "media/build", "manifest.json")
-    manifest = {}
+    manifest_path = os.path.join(
+        os.path.realpath(settings.APP_ROOT), "media", "build", "manifest.json"
+    )
 
-    logger.warning(f"Looking for manifest.json at: {manifest_path}")
+    logger.info(f"Looking for manifest.json at: {manifest_path}")
 
     if os.path.exists(manifest_path):
         try:
             with open(manifest_path, "r") as f:
                 manifest = json.load(f)
-            logger.warning(f"Loaded manifest.json with {len(manifest)} entries.")
+            filepath = manifest[file_alias]
+            return filepath
         except json.JSONDecodeError:
-            logger.error("Failed to decode manifest.json.")
+            raise Exception("Failed to decode manifest.json.")
+        except KeyError:
+            return Http404(f"File alias {file_alias} not found in manifest.json.")
     else:
-        logger.warning(f"Manifest file not found at {manifest_path}.")
-
-    return manifest
+        return Http404(f"Manifest file not found at {manifest_path}.")
