@@ -421,9 +421,9 @@ class ImportSingleCsv(BaseImportModule):
                                     f"pre-existing resource ({resourceid}) found for legacyid {row[id_index]}"
                                 )
                             except Exception as e:
-                                logger.warning(
-                                    "no pre-existing resource found for legacyid",
-                                    row[id_index],
+                                logger.info(
+                                    "no pre-existing resource found for legacyid ",
+                                    legacyid,
                                 )
                                 resourceid = uuid.uuid4()
                                 legacyid = row[id_index]
