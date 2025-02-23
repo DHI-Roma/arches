@@ -420,6 +420,7 @@ class ImportSingleCsv(BaseImportModule):
                                 logger.info(
                                     f"pre-existing resource ({resourceid}) found for legacyid {row[id_index]}"
                                 )
+                                # continue
                             except Exception as e:
                                 logger.info(
                                     "no pre-existing resource found for legacyid ",
