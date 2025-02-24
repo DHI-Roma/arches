@@ -32,6 +32,7 @@ class ArchesTestRunner(DiscoverRunner):
             return ret
 
         app_settings()  # adds languages to system
+        webpack_asset_lookup()  # adds webpack assets to system
         prepare_terms_index(create=True)
         prepare_concepts_index(create=True)
         prepare_search_index(create=True)
