@@ -81,7 +81,7 @@ along with this program. If not, see <http://www.gnu.org/licenses/>.
     {% endblock arches_modules %}
     
     {% if main_script %}
-        <script src="{% webpack_static '' %}build/js/{{main_script}}.js"></script>
+        <script src="{% webpack_static '' %}build/{{main_script_webpack_asset}}"></script>
     {% endif %}
 {% endblock javascript %}
 

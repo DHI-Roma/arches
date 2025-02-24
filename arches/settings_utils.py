@@ -131,6 +131,7 @@ def build_templates_config(
                             "arches.app.utils.context_processors.livereload",
                             "arches.app.utils.context_processors.map_info",
                             "arches.app.utils.context_processors.app_settings",
+                            "arches.app.utils.context_processors.webpack_asset_lookup",
                         ]
                     ),
                     "debug": debug,
