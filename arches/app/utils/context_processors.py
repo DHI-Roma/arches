@@ -135,6 +135,6 @@ def webpack_asset(file_alias, request=None):
         except json.JSONDecodeError:
             raise Exception("Failed to decode manifest.json.")
         except KeyError:
-            return Http404(f"File alias {file_alias} not found in manifest.json.")
+            logger.warning(f"File alias {file_alias} not found in manifest.json.")
     else:
-        return Http404(f"Manifest file not found at {manifest_path}.")
+        logger.warning(f"Manifest file not found at {manifest_path}.")
