@@ -116,10 +116,11 @@ def app_settings(request=None):
     }
 
 
-def webpack_asset(file_alias, request=None):
+def webpack_asset_lookup(request=None):
     """
     Looks up webpack asset path name (including file hash) from the webpack manifest.json
     """
+    manifest = dict()
     manifest_path = os.path.join(
         os.path.realpath(settings.APP_ROOT), "media", "build", "manifest.json"
     )
@@ -130,11 +131,8 @@ def webpack_asset(file_alias, request=None):
         try:
             with open(manifest_path, "r") as f:
                 manifest = json.load(f)
-            filepath = manifest[file_alias]
-            return filepath
         except json.JSONDecodeError:
             raise Exception("Failed to decode manifest.json.")
-        except KeyError:
-            logger.warning(f"File alias {file_alias} not found in manifest.json.")
     else:
         logger.warning(f"Manifest file not found at {manifest_path}.")
+    return {"webpack_asset_lookup": manifest}
