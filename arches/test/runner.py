@@ -8,7 +8,7 @@ from arches.app.search.mappings import (
     prepare_search_index,
     delete_search_index,
 )
-from arches.app.utils.context_processors import app_settings
+from arches.app.utils.context_processors import app_settings, webpack_asset_lookup
 
 
 class ArchesTestRunner(DiscoverRunner):
