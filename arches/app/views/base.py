@@ -23,6 +23,7 @@ from arches.app.utils.betterJSONSerializer import JSONSerializer, JSONDeserializ
 from django.utils.translation import gettext as _
 from django.views.generic import TemplateView
 from arches.app.datatypes.datatypes import DataTypeFactory
+from arches.app.utils.context_processors import webpack_asset_lookup
 from arches.app.utils.permission_backend import (
     get_createable_resource_models,
     user_is_resource_reviewer,
@@ -94,7 +95,7 @@ class BaseManagerView(TemplateView):
             > 0
         )
         main_script = kwargs.get("main_script")
-        context["main_script_webpack_asset"] = context["webpack_asset_lookup"].get(
+        context["main_script_webpack_asset"] = webpack_asset_lookup().get(
             f"js/{main_script}.js", ""
         )
         context["app_name"] = settings.APP_NAME
