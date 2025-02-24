@@ -30,7 +30,6 @@ from arches.app.utils.permission_backend import (
     get_resource_types_by_perm,
     user_can_read_map_layers,
 )
-from arches.app.utils.context_processors import webpack_asset
 
 
 class BaseManagerView(TemplateView):
