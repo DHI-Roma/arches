@@ -24,7 +24,6 @@ from arches.app.models.models import GroupMapSettings, Language
 from arches.app.models.system_settings import settings
 from arches.app.utils.geo_utils import GeoUtils
 from arches.app.utils.betterJSONSerializer import JSONSerializer
-from django.http.response import Http404
 from django.utils.translation import get_language, get_language_bidi
 
 logger = logging.getLogger(__name__)
