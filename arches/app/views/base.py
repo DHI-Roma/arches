@@ -95,8 +95,8 @@ class BaseManagerView(TemplateView):
             > 0
         )
         main_script = kwargs.get("main_script")
-        context["main_script_webpack_asset"] = (
-            webpack_asset(f"js/{main_script}.js", self.request) or ""
+        context["main_script_webpack_asset"] = context["webpack_asset_lookup"].get(
+            f"js/{main_script}.js", ""
         )
         context["app_name"] = settings.APP_NAME
         context["show_language_swtich"] = settings.SHOW_LANGUAGE_SWITCH
