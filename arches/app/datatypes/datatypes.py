@@ -1402,7 +1402,14 @@ class FileListDataType(BaseDataType):
                         current_file.save()
                         tile_file["size"] = current_file.path.size
                 except FileNotFoundError:
-                    logger.exception(_("File does not exist"))
+                    if os.path.exists(source_file):
+                        with open(source_file, "rb") as f:
+                            current_file, created = models.File.objects.get_or_create(
+                                fileid=tile_file["file_id"]
+                            )
+                            tile_file["size"] = current_file.path.size
+                    else:
+                        logger.exception(_("File does not exist"))
 
             else:
                 models.File.objects.get_or_create(
