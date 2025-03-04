@@ -390,7 +390,7 @@ class ResourceEditorView(MapBaseManagerView):
         context["nav"]["title"] = ""
         context["nav"]["menu"] = nav_menu
 
-        if resourceid not in (None, ""):
+        if resourceid not in (None, "", settings.SYSTEM_SETTINGS_RESOURCE_ID):
             context["nav"]["report_view"] = True
 
         if resourceid == settings.RESOURCE_INSTANCE_ID:
@@ -1049,7 +1049,7 @@ class RelatedResourcesView(BaseManagerView):
 
         return ret
 
-    def get(self, request, resourceid=None):
+    def get(self, request, resourceid=None, include_rr_count=True):
         ret = {}
 
         if self.action == "get_candidates":
@@ -1096,6 +1096,7 @@ class RelatedResourcesView(BaseManagerView):
                     user=request.user,
                     resourceinstance_graphid=resourceinstance_graphid,
                     graphs=self.graphs,
+                    include_rr_count=include_rr_count,
                 )
 
                 ret = self.paginate_related_resources(
@@ -1107,6 +1108,7 @@ class RelatedResourcesView(BaseManagerView):
                     user=request.user,
                     resourceinstance_graphid=resourceinstance_graphid,
                     graphs=self.graphs,
+                    include_rr_count=include_rr_count,
                 )
 
         return JSONResponse(ret)
