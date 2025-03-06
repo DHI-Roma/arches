@@ -18,12 +18,10 @@ along with this program. If not, see <http://www.gnu.org/licenses/>.
 
 from arches.app.models import models
 from arches.app.models.system_settings import settings
-from arches.app.models.resource import Resource
-from arches.app.utils.betterJSONSerializer import JSONSerializer, JSONDeserializer
+from arches.app.utils.betterJSONSerializer import JSONSerializer
 from django.utils.translation import gettext as _
 from django.views.generic import TemplateView
 from arches.app.datatypes.datatypes import DataTypeFactory
-from arches.app.utils.context_processors import webpack_asset_lookup
 from arches.app.utils.permission_backend import (
     get_createable_resource_models,
     user_is_resource_reviewer,
