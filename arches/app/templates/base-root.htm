@@ -83,7 +83,7 @@ along with this program. If not, see <http://www.gnu.org/licenses/>.
     
     {% if main_script %}
         {% with key=main_script|add:".js" %}
-            <script src="{% webpack_static '' %}build/{{webpack_asset_lookup|get:key}}"></script>
+            <script src="{% webpack_static '' %}build/{{webpack_asset_lookup|val_from_key=key}}"></script>
         {% endwith %}
     {% endif %}
 {% endblock javascript %}
