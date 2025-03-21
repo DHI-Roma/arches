@@ -8,7 +8,7 @@ import sys
 
 from datetime import datetime
 from django.db import connection, connections
-from django.db.models import prefetch_related_objects, Prefetch, Q, QuerySet
+from django.db.models import prefetch_related_objects, F, Prefetch, Q, QuerySet
 from django.utils.translation import get_language
 
 from arches.app.models import models
@@ -366,6 +366,7 @@ def index_resources_by_type(
             published_graph_active_lang = models.PublishedGraph.objects.get(
                 language=get_language(),
                 publication__graph_id=resource_type,
+                publication__graph__publication=F("publication"),
             )
             index_resources_using_singleprocessing(
                 resources=resources,
