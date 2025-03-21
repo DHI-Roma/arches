@@ -263,13 +263,10 @@ def index_resources_using_singleprocessing(
                 # Move prefetched relations to where the Proxy Model expects them.
                 resource.tiles = resource.prefetched_tiles
                 resource.descriptor_function = resource.graph.descriptor_function
-                try:
-                    resource.serialized_graph = (
-                        resource.graph.publication.published_graph_active_lang[
-                            0
-                        ].serialized_graph
-                    )
-                except IndexError:
+                in_language = resource.graph.publication.published_graph_active_lang
+                if in_language:
+                    resource.serialized_graph = in_language[0].serialized_graph
+                else:
                     resource.serialized_graph = None
 
                 resource.set_node_datatypes(node_datatypes)
