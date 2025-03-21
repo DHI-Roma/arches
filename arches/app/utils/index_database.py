@@ -180,7 +180,9 @@ def index_resources_using_multiprocessing(
         pool.join()
 
 
-def optimize_resource_iteration(resources: Iterable[Resource], chunk_size: int):
+def optimize_resource_iteration(
+    resources: Iterable[Resource], chunk_size: int, serialized_graph: dict | None = None
+):
     """
     - select related graphs
     - prefetch tiles (onto .prefetched_tiles)
@@ -206,30 +208,28 @@ def optimize_resource_iteration(resources: Iterable[Resource], chunk_size: int):
         queryset=descriptor_query,
         to_attr="descriptor_function",
     )
-    published_graph_query = models.PublishedGraph.objects.filter(
-        language=get_language()
-    )
-    published_graph_prefetch = Prefetch(
-        "graph__publication__publishedgraph_set",
-        queryset=published_graph_query,
-        to_attr="published_graph_active_lang",
-    )
+
+    prefetches = [tiles_prefetch, descriptor_prefetch]
+    if not serialized_graph:
+        prefetches.append(
+            Prefetch(
+                "graph__publication__publishedgraph_set",
+                queryset=models.PublishedGraph.objects.filter(language=get_language()),
+                to_attr="published_graph_active_lang",
+            )
+        )
 
     if isinstance(resources, QuerySet):
         return (
             resources.select_related("graph")
-            .prefetch_related(
-                tiles_prefetch, descriptor_prefetch, published_graph_prefetch
-            )
+            .prefetch_related(*prefetches)
             .iterator(chunk_size=chunk_size)
         )
     else:  # public API that arches itself does not currently use
         for r in resources:
             r.clean_fields()  # ensure strings become UUIDs
 
-        prefetch_related_objects(
-            resources, tiles_prefetch, descriptor_prefetch, published_graph_prefetch
-        )
+        prefetch_related_objects(resources, *prefetches)
         return resources
 
 
@@ -239,6 +239,8 @@ def index_resources_using_singleprocessing(
     quiet=False,
     title=None,
     recalculate_descriptors=False,
+    *,
+    serialized_graph=None,
 ):
     datatype_factory = DataTypeFactory()
     node_datatypes = {
@@ -258,14 +260,15 @@ def index_resources_using_singleprocessing(
                     bar = None
             chunk_size = max(batch_size // 8, 8)
             for resource in optimize_resource_iteration(
-                resources, chunk_size=chunk_size
+                resources, chunk_size=chunk_size, serialized_graph=serialized_graph
             ):
                 # Move prefetched relations to where the Proxy Model expects them.
                 resource.tiles = resource.prefetched_tiles
                 resource.descriptor_function = resource.graph.descriptor_function
-                in_language = resource.graph.publication.published_graph_active_lang
-                if in_language:
-                    resource.serialized_graph = in_language[0].serialized_graph
+                if serialized_graph:
+                    resource.serialized_graph = serialized_graph
+                elif in_lang := resource.graph.publication.published_graph_active_lang:
+                    resource.serialized_graph = in_lang[0].serialized_graph
                 else:
                     resource.serialized_graph = None
 
@@ -359,17 +362,18 @@ def index_resources_by_type(
             )
 
         else:
-            from arches.app.search.search_engine_factory import (
-                SearchEngineInstance as _se,
-            )
-
             resources = Resource.objects.filter(graph_id=resource_type)
+            published_graph_active_lang = models.PublishedGraph.objects.get(
+                language=get_language(),
+                publication__graph_id=resource_type,
+            )
             index_resources_using_singleprocessing(
                 resources=resources,
                 batch_size=batch_size,
                 quiet=quiet,
                 title=graph_name,
                 recalculate_descriptors=recalculate_descriptors,
+                serialized_graph=published_graph_active_lang.serialized_graph,
             )
 
         q = Query(se=se)
