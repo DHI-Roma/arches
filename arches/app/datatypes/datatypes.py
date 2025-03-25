@@ -2275,7 +2275,13 @@ class ResourceInstanceDataType(BaseDataType):
                 "resourceXresourceId": str(uuid.uuid4()),
             }
 
-        subtypes_dict = {"uuid": uuid.UUID, "dict": dict, "str": str}
+        subtypes_dict = {
+            "uuid": uuid.UUID,
+            "dict": dict,
+            "str": str,
+            "int": int,
+            "float": float,
+        }
 
         if isinstance(value, str):
             for test_method in [uuid.UUID, json.loads, ast.literal_eval]:
@@ -2313,15 +2319,6 @@ class ResourceInstanceDataType(BaseDataType):
         transformed_value = []
 
         match value_type:
-            case "str":  # aka legacyid
-                boolquery.must(
-                    Terms(field="legacyid.keyword", terms=converted_value)
-                )  # exact match on keyword
-                query.add_query(boolquery)
-                results = query.search(index=RESOURCES_INDEX)
-                for hit in results["hits"]["hits"]:
-                    transformed_value.append(build_resource_instance_object(hit))
-
             case "uuid":
                 results = query.search(
                     index=RESOURCES_INDEX, id=[str(val) for val in converted_value]
@@ -2336,6 +2333,17 @@ class ResourceInstanceDataType(BaseDataType):
                     except:
                         continue
                     transformed_value.append(val)
+            case _:  # default case (handles str/legacyid and any other types)
+                if value_type != "str":
+                    converted_value = [str(val) for val in converted_value]
+                boolquery.must(
+                    Terms(field="legacyid.keyword", terms=converted_value)
+                )  # exact match on keyword
+                query.add_query(boolquery)
+                results = query.search(index=RESOURCES_INDEX)
+                print(f"{len(results['hits']['hits'])} hits")
+                for hit in results["hits"]["hits"]:
+                    transformed_value.append(build_resource_instance_object(hit))
 
         if len(transformed_value) == 0:
             logger.warning(
