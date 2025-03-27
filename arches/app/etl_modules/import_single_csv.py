@@ -169,7 +169,7 @@ class ImportSingleCsv(BaseImportModule):
         temp_dir = os.path.join(settings.UPLOADED_FILES_DIR, "tmp", self.loadid)
         try:
             self.delete_from_default_storage(temp_dir)
-        except FileNotFoundError:
+        except:
             pass
 
         csv_file_name = None
@@ -609,7 +609,10 @@ class ImportSingleCsv(BaseImportModule):
                     [loadid],
                 )
 
-        self.delete_from_default_storage(temp_dir)
+        try:
+            self.delete_from_default_storage(temp_dir)
+        except:
+            pass
 
         message = "staging table populated"
         return {"success": True, "data": message}
