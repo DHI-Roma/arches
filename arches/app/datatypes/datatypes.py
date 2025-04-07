@@ -2343,6 +2343,10 @@ class ResourceInstanceDataType(BaseDataType):
                     "type": "text",
                     "fields": {"keyword": {"ignore_above": 256, "type": "keyword"}},
                 },
+                "resourceName": {
+                    "type": "text",
+                    "fields": {"keyword": {"ignore_above": 256, "type": "keyword"}},
+                },
                 "ontologyProperty": {
                     "type": "text",
                     "fields": {"keyword": {"ignore_above": 256, "type": "keyword"}},
