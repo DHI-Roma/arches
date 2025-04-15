@@ -110,14 +110,14 @@ class Tile(models.TileModel):
         self.serialized_graph = None
         self.load_serialized_graph()
 
-    def load_serialized_graph(self, raise_if_missing=False):
+    def load_serialized_graph(self):
         try:
             resource = self.resourceinstance
         except models.ResourceInstance.DoesNotExist:
             return
-        published_graph = resource.graph.get_published_graph(
-            raise_if_missing=raise_if_missing
-        )
+
+        published_graph = resource.graph.get_published_graph()
+
         if published_graph:
             self.serialized_graph = published_graph.serialized_graph
 
@@ -451,7 +451,7 @@ class Tile(models.TileModel):
         oldprovisionalvalue = None
 
         if not self.serialized_graph:
-            self.load_serialized_graph(raise_if_missing=True)
+            self.load_serialized_graph()
         try:
             if user is None and request is not None:
                 user = request.user
@@ -795,30 +795,18 @@ class Tile(models.TileModel):
         context -- string e.g. "copy" indicating conditions under which a resource is saved and how functions should behave.
         """
 
-        try:
-            for function in self._getFunctionClassInstances():
-                try:
-                    function.save(self, request, context=context)
-                except NotImplementedError:
-                    pass
-        except TypeError as e:
-            logger.warning(
-                _("No associated functions or other TypeError raised by a function")
-            )
-            logger.warning(e)
+        for function in self._getFunctionClassInstances():
+            try:
+                function.save(self, request, context=context)
+            except NotImplementedError:
+                pass
 
     def __preDelete(self, request=None):
-        try:
-            for function in self._getFunctionClassInstances():
-                try:
-                    function.delete(self, request)
-                except NotImplementedError:
-                    pass
-        except TypeError as e:
-            logger.warning(
-                _("No associated functions or other TypeError raised by a function")
-            )
-            logger.warning(e)
+        for function in self._getFunctionClassInstances():
+            try:
+                function.delete(self, request)
+            except NotImplementedError:
+                pass
 
     def __postSave(self, request=None, context=None):
         """
@@ -827,27 +815,20 @@ class Tile(models.TileModel):
         context -- string e.g. "copy" indicating conditions under which a resource is saved and how functions should behave.
         """
 
-        try:
-            for function in self._getFunctionClassInstances():
-                try:
-                    function.post_save(self, request, context=context)
-                except NotImplementedError:
-                    pass
-        except TypeError as e:
-            logger.warning(
-                _("No associated functions or other TypeError raised by a function")
-            )
-            logger.warning(e)
+        for function in self._getFunctionClassInstances():
+            try:
+                function.post_save(self, request, context=context)
+            except NotImplementedError:
+                pass
 
     def _getFunctionClassInstances(self):
         ret = []
-        resource = models.ResourceInstance.objects.get(pk=self.resourceinstance_id)
         functionXgraphs = models.FunctionXGraph.objects.filter(
-            Q(graph_id=resource.graph_id),
+            Q(graph_id=self.resourceinstance.graph_id),
             Q(config__contains={"triggering_nodegroups": [str(self.nodegroup_id)]})
             | Q(config__triggering_nodegroups__exact=[]),
             ~Q(function__functiontype="primarydescriptors"),
-        )
+        ).select_related("function")
         for functionXgraph in functionXgraphs:
             func = functionXgraph.function.get_class_module()(
                 functionXgraph.config, self.nodegroup_id

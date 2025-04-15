@@ -200,14 +200,11 @@ class Card(models.CardModel):
 
         """
         with transaction.atomic():
-            if self.graph.ontology and self.graph.isresource:
+            if self.graph.ontology_id and self.graph.isresource:
                 edge = self.get_edge_to_parent()
                 if self.ontologyproperty is not None:
                     edge.ontologyproperty = self.ontologyproperty
                 edge.save()
-
-            self.nodegroup.cardinality = self.cardinality
-            self.nodegroup.save()
 
             super(Card, self).save()
             for widget in self.widgets:
@@ -290,7 +287,7 @@ class Card(models.CardModel):
             if "constraints" not in exclude
             else ret.pop("constraints", None)
         )
-        if self.graph and self.graph.ontology and self.graph.isresource:
+        if self.graph and self.graph.ontology_id and self.graph.isresource:
             edge = self.get_edge_to_parent()
             ret["ontologyproperty"] = edge.ontologyproperty
 

@@ -15,14 +15,14 @@ from django.db import ProgrammingError, connection
 from django.db.models import Case, F, JSONField, Max, Q, Value, When
 from django.db.models.constraints import UniqueConstraint
 from django.db.models.expressions import CombinedExpression
-from django.db.models.functions import Concat
+from django.db.models.functions import Concat, Lower
 from django.utils import translation
 from django.utils.translation import gettext_lazy as _
 
 from arches.app.const import ExtensionType
 from arches.app.models.fields.i18n import I18n_TextField, I18n_JSONField
-from arches.app.models.functions import UUID4
 from arches.app.models.mixins import SaveSupportsBlindOverwriteMixin
+from arches.app.models.query_expressions import UUID4
 from arches.app.models.utils import add_to_update_fields
 from arches.app.utils import import_class_from_string
 from arches.app.utils.betterJSONSerializer import JSONSerializer
@@ -523,31 +523,176 @@ class GraphModel(SaveSupportsBlindOverwriteMixin, models.Model):
         else:
             return True
 
-    def get_published_graph(self, language=None, raise_if_missing=False):
+    def should_use_published_graph(self):
+        return bool(
+            self.publication_id
+            and not self.source_identifier_id
+            and not self.has_unpublished_changes
+        )
+
+    def get_published_graph(self, language=None):
+        if not self.publication_id:
+            return None
+
         if not language:
             language = translation.get_language()
 
-        try:
-            graph = PublishedGraph.objects.get(
-                publication=self.publication, language=language
-            )
-        except PublishedGraph.DoesNotExist:
-            if raise_if_missing:
-                raise
-            graph = None
+        for published_graph in self.publication.publishedgraph_set.all():
+            if published_graph.language_id == language:
+                return published_graph
 
-        return graph
+        return None
+
+    def get_cards(self, force_recalculation=False):
+        if self.should_use_published_graph() and not force_recalculation:
+            published_graph = self.get_published_graph()
+
+            card_slugs = []
+            for card_dict in published_graph.serialized_graph["cards"]:
+                card_slug = {}
+
+                for key, value in card_dict.items():
+                    # filter out keys from the serialized_graph that would cause an error on instantiation
+                    if key not in ["constraints", "is_editable"]:
+                        if isinstance(value, str):
+                            try:
+                                value = uuid.UUID(value)
+                            except ValueError:
+                                pass
+                        card_slug[key] = value
+
+                card_slugs.append(card_slug)
+
+            return [models.CardModel(**card_slug) for card_slug in card_slugs]
+        else:
+            return self.cardmodel_set.all()
+
+    def get_nodegroups(self, force_recalculation=False):
+        if self.should_use_published_graph() and not force_recalculation:
+            published_graph = self.get_published_graph()
+
+            nodegroup_slugs = []
+            for nodegroup_dict in published_graph.serialized_graph["nodegroups"]:
+                nodegroup_slug = {}
+
+                for key, value in nodegroup_dict.items():
+                    if isinstance(value, str):
+                        try:
+                            value = uuid.UUID(value)
+                        except ValueError:
+                            pass
+                    nodegroup_slug[key] = value
+
+                nodegroup_slugs.append(nodegroup_slug)
+
+            return [
+                models.NodeGroup(**nodegroup_dict) for nodegroup_dict in nodegroup_slugs
+            ]
+        else:
+            return list(
+                {node.nodegroup for node in self.node_set.all() if node.is_collector}
+            )
+
+    def get_nodes(self, force_recalculation=False):
+        if self.should_use_published_graph() and not force_recalculation:
+            published_graph = self.get_published_graph()
+
+            node_slugs = []
+            for node_dict in published_graph.serialized_graph["nodes"]:
+                node_slug = {}
+
+                for key, value in node_dict.items():
+                    # filter out keys from the serialized_graph that would cause an error on instantiation
+                    if key not in ["is_collector", "parentproperty"]:
+                        if isinstance(value, str):
+                            try:
+                                value = uuid.UUID(value)
+                            except ValueError:
+                                pass
+                        node_slug[key] = value
+
+                node_slugs.append(node_slug)
+
+            return [models.Node(**node_slug) for node_slug in node_slugs]
+        else:
+            return self.node_set.all()
+
+    def get_edges(self, force_recalculation=False):
+        if self.should_use_published_graph() and not force_recalculation:
+            published_graph = self.get_published_graph()
+
+            edge_slugs = []
+            for edge_dict in published_graph.serialized_graph["edges"]:
+                edge_slug = {}
+
+                for key, value in edge_dict.items():
+                    if isinstance(value, str):
+                        try:
+                            value = uuid.UUID(value)
+                        except ValueError:
+                            pass
+                    edge_slug[key] = value
+
+                edge_slugs.append(edge_slug)
+
+            return [models.Edge(**edge_dict) for edge_dict in edge_slugs]
+        else:
+            return self.edge_set.all()
+
+    def get_card_x_node_x_widgets(self, force_recalculation=False):
+        if self.should_use_published_graph() and not force_recalculation:
+            published_graph = self.get_published_graph()
+
+            cards_x_nodes_x_widgets_slugs = []
+
+            try:
+                serialized_cards_x_nodes_x_widgets = published_graph.serialized_graph[
+                    "cards_x_nodes_x_widgets"
+                ]
+            except KeyError:
+                # Handle import of legacy (v7.6 and previous) graphs
+                serialized_cards_x_nodes_x_widgets = published_graph.serialized_graph[
+                    "widgets"
+                ]
+
+            for cards_x_nodes_x_widgets_dict in serialized_cards_x_nodes_x_widgets:
+                cards_x_nodes_x_widgets_slug = {}
+
+                for key, value in cards_x_nodes_x_widgets_dict.items():
+                    if isinstance(value, str):
+                        try:
+                            value = uuid.UUID(value)
+                        except ValueError:
+                            pass
+                    cards_x_nodes_x_widgets_slug[key] = value
+
+                cards_x_nodes_x_widgets_slugs.append(cards_x_nodes_x_widgets_slug)
+
+            return [
+                models.CardXNodeXWidget(**cards_x_nodes_x_widgets_dict)
+                for cards_x_nodes_x_widgets_dict in cards_x_nodes_x_widgets_slugs
+            ]
+        else:
+            return [
+                card_x_node_x_widget
+                for card in self.cardmodel_set.all()
+                for card_x_node_x_widget in card.cardxnodexwidget_set.all()
+            ]
 
     def save(self, **kwargs):
         if (
             self.isresource
-            and not self.source_identifier
+            and not self.source_identifier_id
             and not self.resource_instance_lifecycle
         ):
             self.resource_instance_lifecycle_id = (
                 settings.DEFAULT_RESOURCE_INSTANCE_LIFECYCLE_ID
             )
             add_to_update_fields(kwargs, "resource_instance_lifecycle_id")
+
+        if self.has_unpublished_changes is not False:
+            self.has_unpublished_changes = True
+            add_to_update_fields(kwargs, "has_unpublished_changes")
 
         super(GraphModel, self).save(**kwargs)
 
@@ -559,6 +704,9 @@ class GraphModel(SaveSupportsBlindOverwriteMixin, models.Model):
         db_table = "graphs"
 
         constraints = [
+            models.UniqueConstraint(
+                fields=["slug", "source_identifier"], name="unique_slug"
+            ),
             models.CheckConstraint(
                 condition=(
                     Q(isresource=False, resource_instance_lifecycle__isnull=True)
@@ -574,7 +722,7 @@ class GraphModel(SaveSupportsBlindOverwriteMixin, models.Model):
                     )
                 ),
                 name="resource_instance_lifecycle_conditional_null",
-            )
+            ),
         ]
 
 
@@ -765,37 +913,63 @@ class Node(SaveSupportsBlindOverwriteMixin, models.Model):
         )
 
     def get_relatable_resources(self):
-        return [
-            (
-                constraint.resourceclassto
-                if constraint.resourceclassfrom_id == self.pk
-                else constraint.resourceclassfrom
-            )
-            for constraint in (
-                self.resxres_contstraint_classes_from.filter(
-                    resourceclassto__isnull=False
-                )
-                | self.resxres_contstraint_classes_to.filter(
-                    resourceclassfrom__isnull=False
-                )
-            )
-        ]
+        query_id = (
+            self.source_identifier_id if self.source_identifier_id else self.nodeid
+        )
+
+        constraints = Resource2ResourceConstraint.objects.filter(
+            Q(resourceclassto_id=query_id) | Q(resourceclassfrom_id=query_id)
+        ).select_related("resourceclassfrom", "resourceclassto")
+
+        filtered_constraints = set()
+        for r2r in constraints:
+            if r2r.resourceclassto_id == query_id and r2r.resourceclassfrom is not None:
+                filtered_constraints.add(r2r.resourceclassfrom)
+            elif (
+                r2r.resourceclassfrom_id == query_id and r2r.resourceclassto is not None
+            ):
+                filtered_constraints.add(r2r.resourceclassto)
+
+        return list(filtered_constraints)
 
     def set_relatable_resources(self, new_ids):
-        old_ids = [res.nodeid for res in self.get_relatable_resources()]
-        for old_id in old_ids:
-            if old_id not in new_ids:
-                Resource2ResourceConstraint.objects.filter(
-                    Q(resourceclassto_id=self.nodeid)
-                    | Q(resourceclassfrom_id=self.nodeid),
-                    Q(resourceclassto_id=old_id) | Q(resourceclassfrom_id=old_id),
-                ).delete()
-        for new_id in new_ids:
-            if new_id not in old_ids:
-                new_r2r = Resource2ResourceConstraint.objects.create(
-                    resourceclassfrom_id=self.nodeid, resourceclassto_id=new_id
+        new_ids = set(new_ids)
+
+        old_ids = set()
+        for res in self.get_relatable_resources():
+            if res.source_identifier_id is not None:
+                old_ids.add(res.source_identifier_id)
+            if res.nodeid is not None:
+                old_ids.add(res.nodeid)
+
+        self_ids = set(
+            id for id in (self.source_identifier_id, self.nodeid) if id is not None
+        )
+
+        ids_to_delete = old_ids - new_ids
+        ids_to_create = new_ids - old_ids
+
+        if ids_to_delete and self_ids:
+            Resource2ResourceConstraint.objects.filter(
+                (
+                    Q(resourceclassto_id__in=self_ids)
+                    & Q(resourceclassfrom_id__in=ids_to_delete)
                 )
-                new_r2r.save()
+                | (
+                    Q(resourceclassto_id__in=ids_to_delete)
+                    & Q(resourceclassfrom_id__in=self_ids)
+                )
+            ).delete()
+
+        if ids_to_create:
+            new_constraints = [
+                Resource2ResourceConstraint(
+                    resourceclassfrom_id=self.source_identifier_id or self.nodeid,
+                    resourceclassto_id=id_to_create,
+                )
+                for id_to_create in ids_to_create
+            ]
+            Resource2ResourceConstraint.objects.bulk_create(new_constraints)
 
     def serialize(self, fields=None, exclude=None, **kwargs):
         ret = JSONSerializer().handle_model(
@@ -1044,7 +1218,7 @@ class Resource2ResourceConstraint(SaveSupportsBlindOverwriteMixin, models.Model)
         blank=True,
         null=True,
         related_name="resxres_contstraint_classes_from",
-        on_delete=models.SET_NULL,
+        on_delete=models.CASCADE,
     )
     resourceclassto = models.ForeignKey(
         Node,
@@ -1052,7 +1226,7 @@ class Resource2ResourceConstraint(SaveSupportsBlindOverwriteMixin, models.Model)
         blank=True,
         null=True,
         related_name="resxres_contstraint_classes_to",
-        on_delete=models.SET_NULL,
+        on_delete=models.CASCADE,
     )
 
     class Meta:
@@ -1207,7 +1381,7 @@ class ResourceInstance(SaveSupportsBlindOverwriteMixin, models.Model):
     # Note that this is intended to bypass normal permissions logic, so a resource type must
     # prevent a user who created the resource from editing it, by updating principaluserid logic.
     principaluser = models.ForeignKey(
-        User, on_delete=models.SET_NULL, blank=True, null=True
+        User, on_delete=models.SET_NULL, blank=True, null=True, editable=False
     )
 
     class Meta:
@@ -1367,6 +1541,15 @@ class ResourceInstanceLifecycleStateFromXRef(models.Model):
     class Meta:
         db_table = "resource_instance_lifecycle_states_from_xref"
         managed = True
+        constraints = [
+            models.UniqueConstraint(
+                fields=[
+                    "resource_instance_lifecycle_state_from",
+                    "resource_instance_lifecycle_state_to",
+                ],
+                name="unique_lifecycle_state_fromxref",
+            ),
+        ]
 
 
 class ResourceInstanceLifecycleStateToXRef(models.Model):
@@ -1384,6 +1567,15 @@ class ResourceInstanceLifecycleStateToXRef(models.Model):
     class Meta:
         db_table = "resource_instance_lifecycle_states_to_xref"
         managed = True
+        constraints = [
+            models.UniqueConstraint(
+                fields=[
+                    "resource_instance_lifecycle_state_from",
+                    "resource_instance_lifecycle_state_to",
+                ],
+                name="unique_lifecycle_state_toxref",
+            ),
+        ]
 
 
 class SearchComponent(SaveSupportsBlindOverwriteMixin, models.Model):
@@ -1512,6 +1704,15 @@ class TileModel(SaveSupportsBlindOverwriteMixin, models.Model):  # Tile
     )
     data = JSONField(blank=True, default=dict, db_column="tiledata")
     nodegroup_id = models.UUIDField(db_column="nodegroupid", null=True)
+    nodegroup = models.ForeignObject(
+        NodeGroup,
+        null=True,
+        on_delete=models.DO_NOTHING,
+        related_name="tiles",
+        related_query_name="tile",
+        from_fields=["nodegroup_id"],
+        to_fields=["nodegroupid"],
+    )
     sortorder = models.IntegerField(blank=True, null=True, default=0)
     provisionaledits = JSONField(blank=True, null=True, db_column="provisionaledits")
 
@@ -1525,16 +1726,10 @@ class TileModel(SaveSupportsBlindOverwriteMixin, models.Model):  # Tile
     def __str__(self):
         return repr(self)
 
-    @property
-    def nodegroup(self):
-        return NodeGroup.objects.filter(pk=self.nodegroup_id).first()
-
     def find_nodegroup_alias(self):
-        return (
-            NodeGroup.objects.filter(pk=self.nodegroup_id)
-            .values_list("grouping_node__alias", flat=True)
-            .first()
-        )
+        if self.nodegroup and self.nodegroup.grouping_node:
+            return self.nodegroup.grouping_node.alias
+        return None
 
     def is_fully_provisional(self):
         return bool(self.provisionaledits and not any(self.data.values()))
@@ -1568,7 +1763,7 @@ class TileModel(SaveSupportsBlindOverwriteMixin, models.Model):  # Tile
         ).aggregate(Max("sortorder"))["sortorder__max"]
         self.sortorder = sortorder_max + 1 if sortorder_max is not None else 0
 
-    def serialize(self, fields=None, exclude=["nodegroup"], **kwargs):
+    def serialize(self, fields=None, exclude=None, **kwargs):
         return JSONSerializer().handle_model(
             self, fields=fields, exclude=exclude, **kwargs
         )
@@ -2148,7 +2343,7 @@ class SpatialView(models.Model):
         validators=[
             RegexValidator(
                 regex=r"^[a-zA-Z_]([a-zA-Z0-9_]+)$",
-                message="Slug must contain only letters, numbers and hyphens, but not begin with a number.",
+                message="Slug must contain only letters, numbers and underscores, but not begin with a number.",
                 code="nomatch",
             )
         ],
@@ -2162,7 +2357,10 @@ class SpatialView(models.Model):
         Node,
         on_delete=models.CASCADE,
         db_column="geometrynodeid",
-        limit_choices_to={"datatype": "geojson-feature-collection"},
+        limit_choices_to={
+            "datatype": "geojson-feature-collection",
+            "source_identifier__isnull": True,
+        },
         null=False,
     )
     ismixedgeometrytypes = models.BooleanField(default=False)
@@ -2189,7 +2387,10 @@ class SpatialView(models.Model):
         """
         Validate the spatial view before saving it to the database as the database triggers have proved hard to test.
         """
+        if not self.geometrynode_id:
+            return
         graph = self.geometrynode.graph
+
         try:
             node_ids = set(node["nodeid"] for node in self.attributenodes)
         except (KeyError, TypeError):
@@ -2199,6 +2400,14 @@ class SpatialView(models.Model):
         if len(node_ids) != found_graph_nodes.count():
             raise ValidationError(
                 "One or more attributenodes do not belong to the graph of the geometry node"
+            )
+
+        # check if any attribute nodes are geojson-feature-collection
+        if "geojson-feature-collection" in [
+            graph_nodes.datatype for graph_nodes in found_graph_nodes
+        ]:
+            raise ValidationError(
+                "One or more attributenodes have a geojson-feature-collection datatype"
             )
 
         # language must be be a valid language code belonging to the current publication
@@ -2234,6 +2443,35 @@ class SpatialView(models.Model):
             "attributenodes": self.attributenodes,
             "isactive": self.isactive,
         }
+
+
+class UserPreference(models.Model):
+    userpreferenceid = models.UUIDField(
+        primary_key=True, default=uuid.uuid4, db_default=UUID4()
+    )
+    username = models.ForeignKey(
+        User,
+        to_field="username",
+        on_delete=models.CASCADE,
+        null=False,
+        related_name="preferences",
+        related_query_name="preference",
+    )
+    preferencename = models.CharField(max_length=255)
+    appname = models.CharField(max_length=255, default="arches")
+    config = JSONField(blank=False, null=False)
+
+    class Meta:
+        managed = True
+        db_table = "user_preferences"
+        constraints = [
+            UniqueConstraint(
+                "username",
+                Lower("preferencename"),
+                Lower("appname"),
+                name="unique_preference_name_user",
+            )
+        ]
 
 
 # Import proxy models to ensure they are always discovered.
