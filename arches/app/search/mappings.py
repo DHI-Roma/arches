@@ -202,6 +202,7 @@ def prepare_search_index(create=False):
                             },
                         },
                         "nodegroup_id": {"type": "keyword"},
+                        "nodeid": {"type": "keyword"},
                         "language": {"type": "text"},
                         "provisional": {"type": "boolean"},
                     },

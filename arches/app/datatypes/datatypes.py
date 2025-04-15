@@ -205,6 +205,7 @@ class StringDataType(BaseDataType):
                     "string": nodevalue[key]["value"],
                     "language": key,
                     "nodegroup_id": tile.nodegroup_id,
+                    "nodeid": nodeid,
                     "provisional": provisional,
                 }
                 document["strings"].append(val)
@@ -1207,6 +1208,7 @@ class FileListDataType(BaseDataType):
                 val = {
                     "string": f["name"],
                     "nodegroup_id": tile.nodegroup_id,
+                    "nodeid": nodeid,
                     "provisional": provisional,
                 }
                 document["strings"].append(val)
@@ -1216,6 +1218,7 @@ class FileListDataType(BaseDataType):
                     val = {
                         "string": f["name"],
                         "nodegroup_id": tile.nodegroup_id,
+                        "nodeid": nodeid,
                         "provisional": provisional,
                     }
                     document["strings"].append(val)
@@ -2176,6 +2179,7 @@ class ResourceInstanceDataType(BaseDataType):
                     {
                         "string": relatedResourceItem["resourceName"],
                         "nodegroup_id": tile.nodegroup_id,
+                        "nodeid": nodeid,
                         "provisional": provisional,
                     }
                 )
@@ -2196,6 +2200,7 @@ class ResourceInstanceDataType(BaseDataType):
                         {
                             "string": relationship,
                             "nodegroup_id": tile.nodegroup_id,
+                            "nodeid": nodeid,
                             "provisional": provisional,
                         }
                     )

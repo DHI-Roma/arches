@@ -149,6 +149,7 @@ class BaseConceptDataType(BaseDataType):
                 {
                     "string": value.value,
                     "nodegroup_id": tile.nodegroup_id,
+                    "nodeid": nodeid,
                     "provisional": provisional,
                 }
             )

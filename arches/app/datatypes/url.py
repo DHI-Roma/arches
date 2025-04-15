@@ -158,6 +158,7 @@ class URLDataType(BaseDataType):
                 val = {
                     "string": nodevalue["url_label"],
                     "nodegroup_id": tile.nodegroup_id,
+                    "node_id": nodeid,
                     "provisional": provisional,
                 }
                 document["strings"].append(val)
@@ -166,6 +167,7 @@ class URLDataType(BaseDataType):
             val = {
                 "string": nodevalue["url"],
                 "nodegroup_id": tile.nodegroup_id,
+                "node_id": nodeid,
                 "provisional": provisional,
             }
             document["strings"].append(val)
