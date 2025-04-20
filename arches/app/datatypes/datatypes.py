@@ -2163,8 +2163,11 @@ class ResourceInstanceDataType(BaseDataType):
                     resourceid = resourceXresource["resourceId"]
                     logger.info(f'Resource with id "{resourceid}" not in the system.')
 
-    def append_to_document(self, document, nodevalue, nodeid, tile, provisional=False):
+    def append_to_document(
+        self, document, nodevalue, nodeid, tile, provisional=False, **kwargs
+    ):
         nodevalue = self.get_nodevalues(nodevalue)
+        node_lookup = kwargs.get("node_lookup", dict())
         for relatedResourceItem in nodevalue:
             relationship = None
             document["ids"].append(
@@ -2204,6 +2207,17 @@ class ResourceInstanceDataType(BaseDataType):
                             "provisional": provisional,
                         }
                     )
+            document["relations"].append(
+                {
+                    "graphid": str(node_lookup[nodeid].graph_id),
+                    "nodeid": nodeid,
+                    "nodegroupid": str(tile.nodegroup_id),
+                    "resourceid": relatedResourceItem["resourceId"],
+                    "relationshiptype": relatedResourceItem.get("ontologyProperty", ""),
+                    "tileid": str(tile.pk),
+                    "resourcexresourceid": relatedResourceItem["resourceXresourceId"],
+                }
+            )
 
     def get_search_terms(self, nodevalue, nodeid=None):
         terms = []

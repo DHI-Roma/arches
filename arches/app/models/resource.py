@@ -29,8 +29,7 @@ from django.core.exceptions import ObjectDoesNotExist
 from django.utils.translation import gettext as _
 from django.utils.translation import get_language
 from arches.app.models import models
-from arches.app.models.models import EditLog
-from arches.app.models.models import TileModel
+from arches.app.models.models import TileModel, EditLog, Node
 from arches.app.models.concept import get_preflabel_from_valueid
 from arches.app.models.system_settings import settings
 from arches.app.search.search_engine_factory import SearchEngineInstance as se
@@ -467,6 +466,7 @@ class Resource(models.ResourceInstance):
 
         """
 
+        node_lookup = {str(nodeid): node for node in Node.objects.all()}
         document = {}
         document["displaydescription"] = None
         document["resourceinstanceid"] = str(self.resourceinstanceid)
@@ -549,6 +549,7 @@ class Resource(models.ResourceInstance):
         document["numbers"] = []
         document["date_ranges"] = []
         document["ids"] = []
+        document["relations"] = []
         tiles_have_authoritative_data = any(
             any(val is not None for val in t.data.values()) for t in tiles
         )
@@ -569,7 +570,7 @@ class Resource(models.ResourceInstance):
                     datatype = node_datatypes[nodeid]
                     datatype_instance = datatype_factory.get_instance(datatype)
                     datatype_instance.append_to_document(
-                        document, nodevalue, nodeid, tile
+                        document, nodevalue, nodeid, tile, node_lookup=node_lookup
                     )
                     node_terms = datatype_instance.get_search_terms(nodevalue, nodeid)
 
