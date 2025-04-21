@@ -221,17 +221,39 @@ def optimize_resource_iteration(resources: Iterable[Resource], chunk_size: int):
         to_attr="descriptor_function",
     )
 
+    from_resource_prefetch = Prefetch(
+        "from_resource_relations",
+        queryset=models.ResourceXResource.objects.select_related("node"),
+        to_attr="prefetched_from_relations",
+    )
+    to_resource_prefetch = Prefetch(
+        "to_resource_relations",
+        queryset=models.ResourceXResource.objects.select_related("node"),
+        to_attr="prefetched_to_relations",
+    )
+
     if isinstance(resources, QuerySet):
         return (
             resources.select_related("graph")
-            .prefetch_related(tiles_prefetch, descriptor_prefetch)
+            .prefetch_related(
+                tiles_prefetch,
+                descriptor_prefetch,
+                from_resource_prefetch,
+                to_resource_prefetch,
+            )
             .iterator(chunk_size=chunk_size)
         )
     else:  # public API that arches itself does not currently use
         for r in resources:
             r.clean_fields()  # ensure strings become UUIDs
 
-        prefetch_related_objects(resources, tiles_prefetch, descriptor_prefetch)
+        prefetch_related_objects(
+            resources,
+            tiles_prefetch,
+            descriptor_prefetch,
+            from_resource_prefetch,
+            to_resource_prefetch,
+        )
         return resources
 
 
@@ -263,6 +285,9 @@ def index_resources_using_singleprocessing(
                 resources, chunk_size=chunk_size
             ):
                 resource.tiles = resource.prefetched_tiles
+                resource.relations = getattr(
+                    resource, "prefetched_from_relations", []
+                ) + getattr(resource, "prefetched_to_relations", [])
                 resource.descriptor_function = resource.graph.descriptor_function
                 resource.set_node_datatypes(node_datatypes)
                 resource.set_serialized_graph(get_serialized_graph(resource.graph))
@@ -274,6 +299,7 @@ def index_resources_using_singleprocessing(
                     fetchTiles=False,
                     datatype_factory=datatype_factory,
                     node_datatypes=node_datatypes,
+                    fetch_relations=False,
                 )
                 doc_indexer.add(
                     index=RESOURCES_INDEX,
