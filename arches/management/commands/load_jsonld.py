@@ -571,6 +571,7 @@ def monkey_get_documents_to_index(self, node_info):
     document["numbers"] = []
     document["date_ranges"] = []
     document["ids"] = []
+    document["relations"] = []
     document["provisional_resource"] = "false"
 
     terms = []
