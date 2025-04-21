@@ -573,8 +573,8 @@ class Resource(models.ResourceInstance):
                 }
             )
             for rxr in ResourceXResource.objects.filter(
-                Q(from_resource=self) | Q(to_resource=self).select_related("nodeid")
-            )
+                Q(from_resource=self) | Q(to_resource=self)
+            ).select_related("nodeid")
         ]
         tiles_have_authoritative_data = any(
             any(val is not None for val in t.data.values()) for t in tiles
