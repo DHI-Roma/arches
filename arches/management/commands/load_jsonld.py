@@ -24,6 +24,7 @@ from pathlib import Path
 from django.core.management.base import BaseCommand
 from django.core.files.storage import default_storage
 from django.db import transaction
+from django.db.models import Q
 
 from arches.app.models import models as archesmodels
 from arches.app.models.resource import Resource
@@ -572,7 +573,34 @@ def monkey_get_documents_to_index(self, node_info):
     document["numbers"] = []
     document["date_ranges"] = []
     document["ids"] = []
-    document["relations"] = []
+    document["relations"] = [
+        (
+            {
+                "graphid": str(rxr.to_resource_graph_id),
+                "nodeid": str(rxr.node_id),
+                "nodegroupid": str(rxr.node.nodegroup_id),
+                "resourceid": str(rxr.to_resource_id),
+                "relationshiptype": str(rxr.relationshiptype),
+                "directionality": "from",
+                "tileid": str(rxr.tile_id),
+                "resourcexresourceid": str(rxr.pk),
+            }
+            if rxr.from_resource_id == self.resourceinstanceid
+            else {
+                "graphid": str(rxr.from_resource_graph_id),
+                "nodeid": str(rxr.node_id),
+                "nodegroupid": str(rxr.node.nodegroup_id),
+                "resourceid": str(rxr.from_resource_id),
+                "relationshiptype": str(rxr.inverserelationshiptype),
+                "directionality": "to",
+                "tileid": str(rxr.tile_id),
+                "resourcexresourceid": str(rxr.pk),
+            }
+        )
+        for rxr in archesmodels.ResourceXResource.objects.filter(
+            Q(from_resource=self) | Q(to_resource=self).select_related("node")
+        )
+    ]
     document["provisional_resource"] = "false"
 
     terms = []

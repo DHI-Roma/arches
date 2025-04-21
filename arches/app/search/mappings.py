@@ -288,6 +288,7 @@ def prepare_search_index(create=False):
                         "graphid": {"type": "keyword"},
                         "nodeid": {"type": "keyword"},
                         "nodegroupid": {"type": "keyword"},
+                        "directionality": {"type": "keyword"},
                         "resourceid": {"type": "keyword"},
                         "relationshiptype": {"type": "keyword"},
                         "tileid": {"type": "keyword"},
