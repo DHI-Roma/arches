@@ -29,7 +29,7 @@ from django.core.exceptions import ObjectDoesNotExist
 from django.utils.translation import gettext as _
 from django.utils.translation import get_language
 from arches.app.models import models
-from arches.app.models.models import TileModel, EditLog, Node
+from arches.app.models.models import TileModel, EditLog, Node, ResourceXResource
 from arches.app.models.concept import get_preflabel_from_valueid
 from arches.app.models.system_settings import settings
 from arches.app.search.search_engine_factory import SearchEngineInstance as se
@@ -548,7 +548,34 @@ class Resource(models.ResourceInstance):
         document["numbers"] = []
         document["date_ranges"] = []
         document["ids"] = []
-        document["relations"] = []
+        document["relations"] = [
+            (
+                {
+                    "graphid": str(rxr.resourceinstanceto_graphid_id),
+                    "nodeid": str(rxr.nodeid_id),
+                    "nodegroupid": str(rxr.nodeid.nodegroup_id),
+                    "resourceid": str(rxr.resourceinstanceidto_id),
+                    "relationshiptype": str(rxr.relationshiptype),
+                    "directionality": "from",
+                    "tileid": str(rxr.tileid_id),
+                    "resourcexresourceid": str(rxr.pk),
+                }
+                if rxr.from_resource_id == self.resourceinstanceid
+                else {
+                    "graphid": str(rxr.resourceinstancefrom_graphid_id),
+                    "nodeid": str(rxr.nodeid_id),
+                    "nodegroupid": str(rxr.nodeid.nodegroup_id),
+                    "resourceid": str(rxr.resourceinstanceidfrom_id),
+                    "relationshiptype": str(rxr.inverserelationshiptype),
+                    "directionality": "to",
+                    "tileid": str(rxr.tileid_id),
+                    "resourcexresourceid": str(rxr.pk),
+                }
+            )
+            for rxr in ResourceXResource.objects.filter(
+                Q(from_resource=self) | Q(to_resource=self).select_related("nodeid")
+            )
+        ]
         tiles_have_authoritative_data = any(
             any(val is not None for val in t.data.values()) for t in tiles
         )

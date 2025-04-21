@@ -288,6 +288,7 @@ def prepare_search_index(create=False):
                         "nodeid": {"type": "keyword"},
                         "nodegroupid": {"type": "keyword"},
                         "resourceid": {"type": "keyword"},
+                        "directionality": {"type": "keyword"},
                         "relationshiptype": {"type": "keyword"},
                         "tileid": {"type": "keyword"},
                         "resourcexresourceid": {"type": "keyword"},
