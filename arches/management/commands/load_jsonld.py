@@ -598,8 +598,8 @@ def monkey_get_documents_to_index(self, node_info):
             }
         )
         for rxr in archesmodels.ResourceXResource.objects.filter(
-            Q(from_resource=self) | Q(to_resource=self).select_related("node")
-        )
+            Q(from_resource=self) | Q(to_resource=self)
+        ).select_related("node")
     ]
     document["provisional_resource"] = "false"
 
