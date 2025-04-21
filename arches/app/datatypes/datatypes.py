@@ -2168,11 +2168,8 @@ class ResourceInstanceDataType(BaseDataType):
                     resourceid = resourceXresource["resourceId"]
                     logger.info(f'Resource with id "{resourceid}" not in the system.')
 
-    def append_to_document(
-        self, document, nodevalue, nodeid, tile, provisional=False, **kwargs
-    ):
+    def append_to_document(self, document, nodevalue, nodeid, tile, provisional=False):
         nodevalue = self.get_nodevalues(nodevalue)
-        node_lookup = kwargs.get("node_lookup", dict())
         for relatedResourceItem in nodevalue:
             relationship = None
             document["ids"].append(
@@ -2212,7 +2209,13 @@ class ResourceInstanceDataType(BaseDataType):
                     )
             document["relations"].append(
                 {
-                    "graphid": str(node_lookup[nodeid].graph_id),
+                    "graphid": (
+                        str(
+                            models.ResourceInstance.objects.get(
+                                pk=relatedResourceItem["resourceId"]
+                            ).graph_id
+                        )
+                    ),
                     "nodeid": nodeid,
                     "nodegroupid": str(tile.nodegroup_id),
                     "resourceid": relatedResourceItem["resourceId"],

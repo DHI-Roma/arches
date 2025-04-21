@@ -484,7 +484,6 @@ class Resource(models.ResourceInstance):
 
         """
 
-        node_lookup = {str(nodeid): node for node in Node.objects.all()}
         document = {}
         document["displaydescription"] = None
         document["resourceinstanceid"] = str(self.resourceinstanceid)
@@ -602,7 +601,7 @@ class Resource(models.ResourceInstance):
                     datatype = node_datatypes[nodeid]
                     datatype_instance = datatype_factory.get_instance(datatype)
                     datatype_instance.append_to_document(
-                        document, nodevalue, nodeid, tile, node_lookup=node_lookup
+                        document, nodevalue, nodeid, tile
                     )
                     node_terms = datatype_instance.get_search_terms(nodevalue, nodeid)
 
