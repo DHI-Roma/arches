@@ -77,7 +77,7 @@ class Resource(models.ResourceInstance):
         self.tiles = []
         self.descriptor_function = None
         self.serialized_graph = None
-        self.node_datatypes = None
+        self.node_lookup = None
 
     def get_serialized_graph(self):
         if not self.serialized_graph:
@@ -91,18 +91,18 @@ class Resource(models.ResourceInstance):
     def set_serialized_graph(self, serialized_graph):
         self.serialized_graph = serialized_graph
 
-    def get_node_datatypes(self):
-        if not self.node_datatypes:
-            self.node_datatypes = {
-                str(nodeid): datatype
-                for nodeid, datatype in models.Node.objects.values_list(
-                    "nodeid", "datatype"
+    def get_node_lookup(self):
+        if not self.node_lookup:
+            self.node_lookup = {
+                str(nodeid): {"datatype": datatype, "graphid": str(graphid)}
+                for nodeid, datatype, graphid in models.Node.objects.values_list(
+                    "nodeid", "datatype", "graph_id"
                 )
             }
-        return self.node_datatypes
+        return self.node_lookup
 
-    def set_node_datatypes(self, node_datatypes):
-        self.node_datatypes = node_datatypes
+    def set_node_lookup(self, node_lookup):
+        self.node_lookup = node_lookup
 
     def get_root_ontology(self):
         """
@@ -348,10 +348,10 @@ class Resource(models.ResourceInstance):
         """
 
         datatype_factory = DataTypeFactory()
-        node_datatypes = {
-            str(nodeid): datatype
-            for nodeid, datatype in models.Node.objects.values_list(
-                "nodeid", "datatype"
+        node_lookup = {
+            str(nodeid): {"datatype": datatype, "graphid": str(graphid)}
+            for nodeid, datatype, graphid in models.Node.objects.values_list(
+                "nodeid", "datatype", "graph_id"
             )
         }
         tiles = []
@@ -391,7 +391,7 @@ class Resource(models.ResourceInstance):
             document, terms = resource.get_documents_to_index(
                 fetchTiles=False,
                 datatype_factory=datatype_factory,
-                node_datatypes=node_datatypes,
+                node_lookup=node_lookup,
             )
 
             documents.append(
@@ -423,16 +423,9 @@ class Resource(models.ResourceInstance):
         if str(self.graph_id) != str(settings.SYSTEM_SETTINGS_RESOURCE_MODEL_ID):
             datatype_factory = DataTypeFactory()
 
-            node_datatypes = {
-                str(nodeid): datatype
-                for nodeid, datatype in (
-                    (k["nodeid"], k["datatype"])
-                    for k in self.get_serialized_graph()["nodes"]
-                )
-            }
             document, terms = self.get_documents_to_index(
                 datatype_factory=datatype_factory,
-                node_datatypes=node_datatypes,
+                node_lookup=self.get_node_lookup(),
                 context=context,
             )
             document["root_ontology_class"] = self.get_root_ontology()
@@ -470,7 +463,7 @@ class Resource(models.ResourceInstance):
             resource_indexed.send(sender=self.__class__, instance=self)
 
     def get_documents_to_index(
-        self, fetchTiles=True, datatype_factory=None, node_datatypes=None, context=None
+        self, fetchTiles=True, datatype_factory=None, node_lookup=None, context=None
     ):
         """
         Gets all the documents nessesary to index a single resource
@@ -479,12 +472,13 @@ class Resource(models.ResourceInstance):
         Keyword Arguments:
         fetchTiles -- instead of fetching the tiles from the database get them off the model itself
         datatype_factory -- refernce to the DataTypeFactory instance
-        node_datatypes -- a dictionary of datatypes keyed to node ids
+        node_lookup -- a dictionary of serialized nodes keyed to nodeid
         context -- a string such as "copy" to indicate conditions under which a document is indexed
 
         """
 
-        node_lookup = {str(nodeid): node for node in Node.objects.all()}
+        if not node_lookup:
+            node_lookup = self.get_node_lookup()
         document = {}
         document["displaydescription"] = None
         document["resourceinstanceid"] = str(self.resourceinstanceid)
@@ -599,7 +593,7 @@ class Resource(models.ResourceInstance):
                     and nodevalue != {}
                     and nodevalue is not None
                 ):
-                    datatype = node_datatypes[nodeid]
+                    datatype = node_lookup[nodeid]["datatype"]
                     datatype_instance = datatype_factory.get_instance(datatype)
                     datatype_instance.append_to_document(
                         document, nodevalue, nodeid, tile, node_lookup=node_lookup
@@ -639,7 +633,7 @@ class Resource(models.ResourceInstance):
                                     and nodevalue != {}
                                     and nodevalue is not None
                                 ):
-                                    datatype = node_datatypes[nodeid]
+                                    datatype = node_lookup[nodeid]["datatype"]
                                     datatype_instance = datatype_factory.get_instance(
                                         datatype
                                     )

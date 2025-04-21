@@ -243,9 +243,11 @@ def index_resources_using_singleprocessing(
     recalculate_descriptors=False,
 ):
     datatype_factory = DataTypeFactory()
-    node_datatypes = {
-        str(nodeid): datatype
-        for nodeid, datatype in models.Node.objects.values_list("nodeid", "datatype")
+    node_lookup = {
+        str(nodeid): {"datatype": datatype, "graphid": str(graphid)}
+        for nodeid, datatype, graphid in models.Node.objects.values_list(
+            "nodeid", "datatype", "graph_id"
+        )
     }
     with se.BulkIndexer(batch_size=batch_size, refresh=True) as doc_indexer:
         with se.BulkIndexer(batch_size=batch_size, refresh=True) as term_indexer:
@@ -264,7 +266,7 @@ def index_resources_using_singleprocessing(
             ):
                 resource.tiles = resource.prefetched_tiles
                 resource.descriptor_function = resource.graph.descriptor_function
-                resource.set_node_datatypes(node_datatypes)
+                resource.set_node_lookup(node_lookup)
                 resource.set_serialized_graph(get_serialized_graph(resource.graph))
                 if recalculate_descriptors:
                     resource.save_descriptors()
@@ -273,7 +275,7 @@ def index_resources_using_singleprocessing(
                 document, terms = resource.get_documents_to_index(
                     fetchTiles=False,
                     datatype_factory=datatype_factory,
-                    node_datatypes=node_datatypes,
+                    node_lookup=node_lookup,
                 )
                 doc_indexer.add(
                     index=RESOURCES_INDEX,
