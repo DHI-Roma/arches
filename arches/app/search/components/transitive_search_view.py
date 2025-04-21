@@ -100,7 +100,9 @@ class TransitiveSearchView(StandardSearchView):
         )
         search_query_object["query"].add_query(ids_query)
         search_query_object["query"].include("relations")
-        search_query_object["query"].include("tiles")
+        load_tiles = get_str_kwarg_as_bool("tiles", self.request.GET)
+        if load_tiles:
+            search_query_object["query"].include("tiles")
         search_query_object["query"].include("graph_id")
         search_query_object["query"].include("root_ontology_class")
         search_query_object["query"].include("resourceinstanceid")
