@@ -2172,7 +2172,7 @@ class ResourceInstanceDataType(BaseDataType):
         self, document, nodevalue, nodeid, tile, provisional=False, **kwargs
     ):
         nodevalue = self.get_nodevalues(nodevalue)
-        node_lookup = kwargs.get("node_lookup")
+        node_lookup = kwargs.get("node_lookup", dict())
         for relatedResourceItem in nodevalue:
             relationship = None
             document["ids"].append(
@@ -2212,7 +2212,7 @@ class ResourceInstanceDataType(BaseDataType):
                     )
             document["relations"].append(
                 {
-                    "graphid": node_lookup[nodeid]["graphid"],
+                    "graphid": str(node_lookup[nodeid].graph_id),
                     "nodeid": nodeid,
                     "nodegroupid": str(tile.nodegroup_id),
                     "resourceid": relatedResourceItem["resourceId"],

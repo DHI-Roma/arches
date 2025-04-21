@@ -278,10 +278,10 @@ class Command(BaseCommand):
                 "nodeid", "datatype", "issearchable"
             )
         }
-        self.node_lookup = {
-            str(nodeid): {"datatype": datatype, "graphid": str(graphid)}
-            for nodeid, datatype, graphid in archesmodels.Node.objects.values_list(
-                "nodeid", "datatype", "graph_id"
+        self.node_datatypes = {
+            str(nodeid): datatype
+            for nodeid, datatype in archesmodels.Node.objects.values_list(
+                "nodeid", "datatype"
             )
         }
 
@@ -529,7 +529,7 @@ class Command(BaseCommand):
                 document, terms = resource.get_documents_to_index(
                     fetchTiles=False,
                     datatype_factory=self.datatype_factory,
-                    node_lookup=self.node_lookup,
+                    node_datatypes=self.node_datatypes,
                 )
             documents.append(
                 se.create_bulk_item(
@@ -572,7 +572,6 @@ def monkey_get_documents_to_index(self, node_info):
     document["date_ranges"] = []
     document["ids"] = []
     document["provisional_resource"] = "false"
-    document["relations"] = []
 
     terms = []
     for tile in document["tiles"]:
@@ -583,9 +582,7 @@ def monkey_get_documents_to_index(self, node_info):
                 and node_info[nodeid]["issearchable"]
             ):
                 datatype_instance = node_info[nodeid]["datatype"]
-                datatype_instance.append_to_document(
-                    document, nodevalue, nodeid, tile, node_lookup=self.node_lookup
-                )
+                datatype_instance.append_to_document(document, nodevalue, nodeid, tile)
                 node_terms = datatype_instance.get_search_terms(nodevalue, nodeid)
                 for index, term in enumerate(node_terms):
                     terms.append(
