@@ -28,8 +28,16 @@ from django.forms.models import model_to_dict
 from django.core.exceptions import ObjectDoesNotExist, PermissionDenied
 from django.utils.translation import gettext as _
 from django.utils.translation import get_language
-from arches.app.models import models
-from arches.app.models.models import TileModel, EditLog, Node
+from arches.app.models.models import (
+    TileModel,
+    EditLog,
+    ResourceXResource,
+    GraphModel,
+    Node,
+    ResourceInstance,
+    FunctionXGraph,
+    Value,
+)
 from arches.app.models.system_settings import settings
 from arches.app.models.utils import add_to_update_fields
 from arches.app.search.search_engine_factory import SearchEngineInstance as se
@@ -62,7 +70,7 @@ from arches.app.datatypes.datatypes import DataTypeFactory
 logger = logging.getLogger(__name__)
 
 
-class Resource(models.ResourceInstance):
+class Resource(ResourceInstance):
 
     class Meta:
         proxy = True
@@ -95,9 +103,7 @@ class Resource(models.ResourceInstance):
         if not self.node_datatypes:
             self.node_datatypes = {
                 str(nodeid): datatype
-                for nodeid, datatype in models.Node.objects.values_list(
-                    "nodeid", "datatype"
-                )
+                for nodeid, datatype in Node.objects.values_list("nodeid", "datatype")
             }
         return self.node_datatypes
 
@@ -177,7 +183,7 @@ class Resource(models.ResourceInstance):
         """
 
         if self.descriptor_function is None:  # might be empty queryset
-            self.descriptor_function = models.FunctionXGraph.objects.filter(
+            self.descriptor_function = FunctionXGraph.objects.filter(
                 graph_id=self.graph_id, function__functiontype="primarydescriptors"
             ).select_related("function")
 
@@ -317,7 +323,7 @@ class Resource(models.ResourceInstance):
 
         """
 
-        self.tiles = list(models.TileModel.objects.filter(resourceinstance=self))
+        self.tiles = list(TileModel.objects.filter(resourceinstance=self))
         if user:
             readable_nodegroups = get_nodegroups_by_perm(user, perm, any_perm=True)
             self.tiles = [
@@ -350,9 +356,7 @@ class Resource(models.ResourceInstance):
         datatype_factory = DataTypeFactory()
         node_datatypes = {
             str(nodeid): datatype
-            for nodeid, datatype in models.Node.objects.values_list(
-                "nodeid", "datatype"
-            )
+            for nodeid, datatype in Node.objects.values_list("nodeid", "datatype")
         }
         tiles = []
         documents = []
@@ -502,7 +506,7 @@ class Resource(models.ResourceInstance):
         document["date_created"] = self.createdtime
         try:
             document["date_last_edited"] = (
-                models.EditLog.objects.filter(
+                EditLog.objects.filter(
                     resourceinstanceid=self.resourceinstanceid, timestamp__isnull=False
                 )
                 .latest("timestamp")
@@ -559,7 +563,7 @@ class Resource(models.ResourceInstance):
                     document["map_popup"].append(map_popup)
 
         tiles = (
-            list(models.TileModel.objects.filter(resourceinstance=self))
+            list(TileModel.objects.filter(resourceinstance=self))
             if fetchTiles
             else self.tiles
         )
@@ -689,7 +693,7 @@ class Resource(models.ResourceInstance):
         if user != {}:
             user_is_reviewer = user_is_resource_reviewer(user)
             if user_is_reviewer is False:
-                tiles = list(models.TileModel.objects.filter(resourceinstance=self))
+                tiles = list(TileModel.objects.filter(resourceinstance=self))
                 resource_is_provisional = (
                     True
                     if sum([len(t.data) for t in tiles]) == 0
@@ -712,7 +716,7 @@ class Resource(models.ResourceInstance):
             permit_deletion = True
 
         if permit_deletion is True:
-            for related_resource in models.ResourceXResource.objects.filter(
+            for related_resource in ResourceXResource.objects.filter(
                 Q(from_resource_id=self.resourceinstanceid)
                 | Q(to_resource_id=self.resourceinstanceid)
             ):
@@ -841,7 +845,7 @@ class Resource(models.ResourceInstance):
 
         if not graphs:
             graphs = list(
-                models.GraphModel.objects.all()
+                GraphModel.objects.all()
                 .exclude(pk=settings.SYSTEM_SETTINGS_RESOURCE_MODEL_ID)
                 .exclude(isresource=False)
                 .exclude(is_active=False)
@@ -890,10 +894,8 @@ class Resource(models.ResourceInstance):
 
             return (
                 {  # resourceinstance_graphid = "00000000-886a-374a-94a5-984f10715e3a"
-                    "total": models.ResourceXResource.objects.filter(
-                        final_query
-                    ).count(),
-                    "relations": models.ResourceXResource.objects.filter(final_query)[
+                    "total": ResourceXResource.objects.filter(final_query).count(),
+                    "relations": ResourceXResource.objects.filter(final_query)[
                         start:limit
                     ],
                 }
@@ -955,7 +957,7 @@ class Resource(models.ResourceInstance):
             if relation["relationshiptype"]
         }
         relationship_type_values = (
-            models.Value.objects.filter(
+            Value.objects.filter(
                 value__in=relationship_types,
             )
             .select_related("concept")
@@ -964,7 +966,7 @@ class Resource(models.ResourceInstance):
                     "concept__value_set",
                     # Begin with an order, so that if rank_label()
                     # produces ties, we still have a deterministic result.
-                    queryset=models.Value.objects.order_by("pk"),
+                    queryset=Value.objects.order_by("pk"),
                 ),
             )
         )
@@ -1006,7 +1008,7 @@ class Resource(models.ResourceInstance):
                     if resource["found"]
                 ]
                 count_query = (
-                    models.ResourceInstance.objects.filter(pk__in=related_resource_ids)
+                    ResourceInstance.objects.filter(pk__in=related_resource_ids)
                     .annotate(
                         total_relations=(
                             Count("from_resxres", distinct=True)
@@ -1151,7 +1153,7 @@ class Resource(models.ResourceInstance):
         Current supported (tested) node types are: string, date, concept, geometry
         """
 
-        nodes = models.Node.objects.filter(name=node_name, graph_id=self.graph_id)
+        nodes = Node.objects.filter(name=node_name, graph_id=self.graph_id)
         if len(nodes) > 1:
             raise MultipleNodesFoundException(node_name, nodes)
 
@@ -1229,7 +1231,7 @@ class Resource(models.ResourceInstance):
 def parse_node_value(value):
     if is_uuid(value):
         try:
-            return models.Value.objects.get(pk=value).value
+            return Value.objects.get(pk=value).value
         except ObjectDoesNotExist:
             pass
     return value
