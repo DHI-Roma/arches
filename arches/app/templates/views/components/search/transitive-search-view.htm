@@ -1,0 +1,186 @@
+{% load i18n %}
+{% load template_tags %}
+{% load static %}
+
+<article class="main-search-container content-panel flexrow" data-bind="click:function() { sharedStateObject.menuActive(false); }, visible: true", style="display:none;" aria-label="{% trans 'Search page contents' %}">
+        <section class="flex search-results-panel" aria-label="{% trans 'Search results' %}">
+            <div class="search-attribute-widget">
+                <div class="search-filter-tools-container">
+                    <div data-bind="component: {
+                        name: 'term-filter',
+                        params: sharedStateObject
+                    }"></div>
+                    <div class="search-inline-filters-row">
+                        <button class="btn-sm btn btn-mint btn-labeled clear-filter search-btn" data-bind="click: function() {clearQuery();}"><span>{% trans "Clear Filters" %}</span></button>
+                        <div class="search-inline-filters-btns">
+                            <div class="qa-filter" data-bind="visible: sharedStateObject.userIsReviewer() !== false,
+                                component: {
+                                    name: 'provisional-filter',
+                                    params: sharedStateObject
+                                }">
+                            </div>
+                            <div class="resource-filter" data-bind="component: {
+                                name: 'resource-type-filter',
+                                params: sharedStateObject
+                            }">
+                        </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="search-sort-tools-container">
+                    <div class="search-count-container">
+                        <p class="search-title" aria-live="assertive" data-bind="text: $root.translations.shownTotalSearchResults(hits(), total())"></p>
+                    </div>
+                    <div data-bind="component: {
+                        name: 'sort-results',
+                        params: sharedStateObject
+                    }"></div>
+                </div>
+            </div>
+
+            <div class="search-control-container" data-bind="css: { 'slide': !resultsExpanded() }">
+                <!-- Results Block -->
+                <div class="search-results-container">
+                    <div data-bind="component: {
+                        name: 'search-results',
+                        params: sharedStateObject
+                    }"></div>
+                </div>
+
+                <div class="search-footer" data-bind="component: {
+                        name: 'paging-filter',
+                        params: sharedStateObject
+                    }"></div>
+            </div>
+        </section>
+
+        <section class="flex search-map-container" aria-label="{% trans 'Map and filters' %}">
+            <!-- Title Block -->
+            <div class="search-toolbar">
+                <div class="search-type-btn-panel" role="tablist">
+                    <!-- ko foreach: {data: sharedStateObject.searchFilterConfigs, as: 'filter'} -->
+                    <!-- ko if: filter.config.layoutType === 'tabbed' && $parent.sharedStateObject.userCanReadResources -->
+                    <button class="search-type-btn relative" role="tab" data-bind="onEnterkeyClick, onSpaceClick,
+                        css: {'active': $parent.selectedTab() === filter.type}, 
+                        click: function(){
+                            $parent.selectedTab(filter.type); 
+                            $root.shiftFocus('#' + filter.type + '-tabpanel');
+                        },
+                        attr: {
+                            'aria-selected': ($parent.selectedTab() === filter.type).toString(), 
+                            'aria-controls': filter.type + '-tabpanel'
+                        }                  
+                    ">
+                        <i data-bind="css: filter.icon"></i>
+                        <span data-bind="text: filter.name"></span>
+                    </button>
+                    <!-- /ko -->
+                    <!-- /ko -->
+                    <button class="search-type-btn relative" role="tab" data-bind="onEnterkeyClick, onSpaceClick,
+                        css: {'active': $parent.selectedTab() === 'search-view'}, 
+                        click: function(){
+                            $parent.selectedTab('search-view'); 
+                            $root.shiftFocus('#search-view-tabpanel');
+                        },
+                        attr: {
+                            'aria-selected': ($parent.selectedTab() === 'search-view').toString(), 
+                            'aria-controls': 'search-view-tabpanel'
+                        }                  
+                    ">
+                        <i class="fa fa-project-diagram"></i>
+                        <span data-bind="text: 'Transit Search'"></span>
+                    </button>
+                </div>
+
+                <div class="search-type-btn-popup-panel">
+                    <div class="popup-panel-row" data-bind="foreach: {data: sharedStateObject.searchFilterConfigs, as: 'filter'}" role="tablist">
+                        <!-- ko if: filter.config.layoutType === 'popup' && $parent.sharedStateObject.userCanReadResources -->
+                        <button class="saved-search-container search-type-btn-popup relative" role="tab" data-bind="onEnterkeyClick, onSpaceClick,
+                            css: {'active': $parent.selectedPopup() === filter.type}, 
+                            click: function(data, event){
+                                $parent.selectPopup(filter.type); 
+                                $root.handleEscKey(
+                                    event.currentTarget,
+                                    '#' + filter.type + '-popup-tabpanel',
+                                    '#' + filter.type + '-close-btn'
+                                );
+                            },
+                            attr: {
+                                id: filter.type + '-open-btn',
+                                'aria-expanded': ($parent.selectedPopup() === filter.type).toString(),
+                                'aria-label': filter.name,
+                                'aria-controls': filter.type + '-popup-tabpanel'
+                            }
+                        ">
+                            <div data-placement="auto" data-toggle="tooltip" 
+                                data-bind="attr: {'data-original-title': filter.name}
+                            ">
+                                <i data-bind="css: filter.icon"></i>
+                                <p data-bind="text: filter.name"></p>
+                            </div>
+                        </button>
+                        <!-- /ko -->
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex">
+                <!-- Card Container -->
+                <div class="card-form-preview-container relative">
+                    <div class="tab-content relative">
+                        <!-- ko foreach: {data: sharedStateObject.searchFilterConfigs, as: 'filter'} -->
+                        <!-- ko if: filter.config.layoutType === 'tabbed' -->
+                            <div class="tab-pane" role="tabpanel" tabindex="-1" data-bind="css: {'active': $parent.selectedTab() === filter.type}, 
+                                attr: {
+                                    id: filter.type + '-tabpanel',
+                                    'aria-label': filter.name,
+                                },
+                            ">
+                                <div class="tab-content-component" data-bind="component: {
+                                    name: filter.componentname,
+                                    params: $parent.sharedStateObject
+                                }"></div>
+                            </div>
+                        <!-- /ko -->
+                        <!-- /ko -->
+                        <div class="tab-pane" role="tabpanel" tabindex="-1" data-bind="css: {'active': $parent.selectedTab() === filter.type}, 
+                            attr: {
+                                id: 'search-view-tabpanel',
+                                'aria-label': 'transit-search-view',
+                            },
+                        ">
+                            <div class="tab-content-component">
+                                <div>
+                                    <p>Show instances related to search results via Resource Models:</p>
+                                    <ul id="resource-type-filter-contents" class="dropdown-menu dropdown-menu-right">
+                                        <!-- ko foreach: resourceModels -->
+                                        <li><a href="#" data-bind="text: name.length > 55 ? name.substring(55, length) + '...' : name,
+                                            onEnterkeyClick, click: $parent.selectModelType.bind($parent)"></a></li>
+                                        <!-- /ko -->
+                                    </ul>
+                                </div>
+
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="tab-content search-popup-panel" data-bind="foreach: {data: sharedStateObject.searchFilterConfigs, as: 'filter'}, visible: selectedPopup() !== ''">
+                        <!-- ko if: filter.config.layoutType === 'popup' -->
+                        <div class="tab-pane" role="tabpanel" tabindex="-1" data-bind="css: {'active': $parent.selectedPopup() === filter.type}, 
+                            attr: {
+                                id: filter.type + '-popup-tabpanel',
+                                'aria-label': filter.name,
+                            },
+                        ">
+                            <div data-bind="component: {
+                                name: filter.componentname,
+                                params: $parent.sharedStateObject
+                            }"></div>
+                        </div>
+                        <!-- /ko -->
+                    </div>
+
+                </div>
+            </div>
+        </section>
+    </article>
