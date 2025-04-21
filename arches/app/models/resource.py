@@ -560,7 +560,7 @@ class Resource(models.ResourceInstance):
                     "tileid": str(rxr.tileid_id),
                     "resourcexresourceid": str(rxr.pk),
                 }
-                if rxr.from_resource_id == self.resourceinstanceid
+                if rxr.resourceinstanceidfrom_id == self.resourceinstanceid
                 else {
                     "graphid": str(rxr.resourceinstancefrom_graphid_id),
                     "nodeid": str(rxr.nodeid_id),
