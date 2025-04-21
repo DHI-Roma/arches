@@ -2170,6 +2170,10 @@ class ResourceInstanceDataType(BaseDataType):
 
     def append_to_document(self, document, nodevalue, nodeid, tile, provisional=False):
         nodevalue = self.get_nodevalues(nodevalue)
+        rxr_to_graphid_lookup = {
+            str(rxr.to_resource_id): str(rxr.to_resource_graph_id)
+            for rxr in models.ResourceXResource.objects.filter(tile_id=tile.pk)
+        }
         for relatedResourceItem in nodevalue:
             relationship = None
             document["ids"].append(
@@ -2209,13 +2213,7 @@ class ResourceInstanceDataType(BaseDataType):
                     )
             document["relations"].append(
                 {
-                    "graphid": (
-                        str(
-                            models.ResourceInstance.objects.get(
-                                pk=relatedResourceItem["resourceId"]
-                            ).graph_id
-                        )
-                    ),
+                    "graphid": rxr_to_graphid_lookup[relatedResourceItem["resourceId"]],
                     "nodeid": nodeid,
                     "nodegroupid": str(tile.nodegroup_id),
                     "resourceid": relatedResourceItem["resourceId"],
