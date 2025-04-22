@@ -222,12 +222,12 @@ def optimize_resource_iteration(resources: Iterable[Resource], chunk_size: int):
     )
 
     from_resource_prefetch = Prefetch(
-        "from_resource_relations",
+        "from_resxres",
         queryset=models.ResourceXResource.objects.select_related("node"),
         to_attr="prefetched_from_relations",
     )
     to_resource_prefetch = Prefetch(
-        "to_resource_relations",
+        "to_resxres",
         queryset=models.ResourceXResource.objects.select_related("node"),
         to_attr="prefetched_to_relations",
     )
