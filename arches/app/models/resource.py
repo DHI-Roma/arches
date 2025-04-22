@@ -73,6 +73,7 @@ class Resource(models.ResourceInstance):
         # self.resourceinstancesecurity
         # end from models.ResourceInstance
         self.tiles = []
+        self.relations = []
         self.descriptor_function = None
         self.serialized_graph = None
         self.node_datatypes = None
@@ -452,7 +453,12 @@ class Resource(models.ResourceInstance):
             resource_indexed.send(sender=self.__class__, instance=self)
 
     def get_documents_to_index(
-        self, fetchTiles=True, datatype_factory=None, node_datatypes=None, context=None
+        self,
+        fetchTiles=True,
+        datatype_factory=None,
+        node_datatypes=None,
+        context=None,
+        fetch_relations=True,
     ):
         """
         Gets all the documents nessesary to index a single resource
@@ -548,6 +554,10 @@ class Resource(models.ResourceInstance):
         document["numbers"] = []
         document["date_ranges"] = []
         document["ids"] = []
+        if fetch_relations:
+            self.relations = ResourceXResource.objects.filter(
+                Q(from_resource=self) | Q(to_resource=self)
+            ).select_related("nodeid")
         document["relations"] = [
             (
                 {
@@ -572,9 +582,7 @@ class Resource(models.ResourceInstance):
                     "resourcexresourceid": str(rxr.pk),
                 }
             )
-            for rxr in ResourceXResource.objects.filter(
-                Q(from_resource=self) | Q(to_resource=self)
-            ).select_related("nodeid")
+            for rxr in self.relations
         ]
         tiles_have_authoritative_data = any(
             any(val is not None for val in t.data.values()) for t in tiles
