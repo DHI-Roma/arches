@@ -132,7 +132,8 @@ class StandardSearchView(BaseSearchView):
         search_query_object["query"].include("map_popup")
         search_query_object["query"].include("provisional_resource")
         search_query_object["query"].include("permissions")
-        search_query_object["query"].include("relations")
+        search_query_object["query"].include("fromrelations")
+        search_query_object["query"].include("torelations_graphids")
         load_tiles = get_str_kwarg_as_bool("tiles", self.request.GET)
         if load_tiles:
             search_query_object["query"].include("tiles")
