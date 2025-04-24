@@ -281,18 +281,20 @@ def prepare_search_index(create=False):
                         "provisional": {"type": "boolean"},
                     },
                 },
-                "relations": {
+                "fromrelations": {
                     "type": "nested",
                     "properties": {
                         "graphid": {"type": "keyword"},
                         "nodeid": {"type": "keyword"},
                         "nodegroupid": {"type": "keyword"},
                         "resourceid": {"type": "keyword"},
-                        "directionality": {"type": "keyword"},
                         "relationshiptype": {"type": "keyword"},
                         "tileid": {"type": "keyword"},
                         "resourcexresourceid": {"type": "keyword"},
                     },
+                },
+                "torelations_graphids": {
+                    "type": "keyword",
                 },
             },
         },
