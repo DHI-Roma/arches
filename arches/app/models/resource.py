@@ -604,9 +604,9 @@ class Resource(ResourceInstance):
                 .distinct()
             ]
         else:
-            torelations_distinct_graphids = [
+            torelations_distinct_graphids = list(
                 {str(rxr.from_resource_graph_id) for rxr in self.torelations}
-            ]
+            )
         document["fromrelations"] = [
             (
                 {
