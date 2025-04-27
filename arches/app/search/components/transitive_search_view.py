@@ -1,12 +1,13 @@
 from arches.app.search.components.standard_search_view import StandardSearchView
-from arches.app.search.elasticsearch_dsl_builder import Bool, Query, Terms, Nested
+from arches.app.search.elasticsearch_dsl_builder import Bool, Query, Terms, Nested, Ids
 from arches.app.utils.betterJSONSerializer import JSONDeserializer
 
 from arches.app.models.system_settings import settings
-from arches.app.models.models import GraphModel
+from arches.app.models.models import GraphModel, ResourceXResource
 from arches.app.search.mappings import RESOURCES_INDEX
 from arches.app.search.search_engine_factory import SearchEngineFactory
 from arches.app.utils.string_utils import get_str_kwarg_as_bool
+from django.db.models import Q
 from django.utils.translation import gettext as _
 from arches.app.utils.permission_backend import get_resource_types_by_perm
 
@@ -108,17 +109,47 @@ class TransitiveSearchView(StandardSearchView):
         response_object["results"] = results
 
     def execute_followup_query(self, search_query_object, response_object, **kwargs):
+        querystring = kwargs.get("querystring", "[]")
+        related_graphids = set(JSONDeserializer().deserialize(querystring))
         ids_query = Bool()
-        ids_query.filter(
-            Terms(
-                field="resourceinstanceid",
-                terms=[
-                    hit["_id"] for hit in response_object["results"]["hits"]["hits"]
-                ],
+        query_ids = []
+        toresource_ids = []
+
+        for hit in response_object["results"]["hits"]["hits"]:
+            query_ids.extend(
+                rel["resourceid"]
+                for rel in hit["_source"]["fromrelations"]
+                if rel["graphid"] in related_graphids
             )
+            if len(
+                list(
+                    filter(
+                        lambda x: x in related_graphids,
+                        hit["_source"]["torelations_graphids"],
+                    )
+                )
+            ):  # create the list for the first Q
+                toresource_ids.append(hit["_id"])
+
+        query_ids.extend(
+            [
+                str(rxr.resourceinstanceidfrom_id)
+                for rxr in ResourceXResource.objects.filter(
+                    Q(resourceinstanceidto_id__in=toresource_ids)
+                    & Q(resourceinstancefrom_graphid_id__in=related_graphids)
+                )
+            ]
         )
+
+        if len(query_ids) >= 10000:
+            logger.warning(
+                f"WARNING: query resourceid maximum count breached: {len(query_ids)}, limiting to 10000"
+            )
+            query_ids = query_ids[:10000]
+
+        ids_query.filter(Ids(ids=query_ids))
         search_query_object["query"].add_query(ids_query)
-        search_query_object["query"].include("relations")
+        search_query_object["query"].include("fromrelations")
         load_tiles = get_str_kwarg_as_bool("tiles", self.request.GET)
         if load_tiles:
             search_query_object["query"].include("tiles")
@@ -217,7 +248,11 @@ class TransitiveSearchView(StandardSearchView):
                     querystring=querystring,
                 )
 
-        self.execute_followup_query(search_query_object, response_object)
+        self.execute_followup_query(
+            search_query_object,
+            response_object,
+            querystring=sorted_query_obj.get(self.componentname),
+        )
         if response_object["results"] is not None:
             # allow filters to modify the results
             for filter_type, querystring in list(sorted_query_obj.items()):
