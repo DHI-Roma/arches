@@ -2088,6 +2088,13 @@ class ResourceInstanceDataType(BaseDataType):
                         value, source, row_number, message, title
                     )
                     errors.append(error_message)
+        # else:
+        #     title = _("Invalid Resource Instance Datatype")
+        #     message = _("No value provided")
+        #     error_message = self.create_error_message(
+        #         value, source, row_number, message, title
+        #     )
+        #     errors.append(error_message)
 
         return errors
 
