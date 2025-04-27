@@ -282,18 +282,20 @@ def prepare_search_index(create=False):
                 },
                 "date_created": {"type": "keyword"},
                 "date_last_edited": {"type": "keyword"},
-                "relations": {
+                "fromrelations": {
                     "type": "nested",
                     "properties": {
                         "graphid": {"type": "keyword"},
                         "nodeid": {"type": "keyword"},
                         "nodegroupid": {"type": "keyword"},
-                        "directionality": {"type": "keyword"},
                         "resourceid": {"type": "keyword"},
                         "relationshiptype": {"type": "keyword"},
                         "tileid": {"type": "keyword"},
                         "resourcexresourceid": {"type": "keyword"},
                     },
+                },
+                "torelations_graphids": {
+                    "type": "keyword",
                 },
             },
         },
