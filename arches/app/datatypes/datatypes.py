@@ -2346,7 +2346,7 @@ class ResourceInstanceDataType(BaseDataType):
                 )  # exact match on keyword
                 query.add_query(boolquery)
                 results = query.search(index=RESOURCES_INDEX)
-                print(f"{len(results['hits']['hits'])} hits")
+                # print(f"{len(results['hits']['hits'])} hits")
                 for hit in results["hits"]["hits"]:
                     transformed_value.append(build_resource_instance_object(hit))
 
