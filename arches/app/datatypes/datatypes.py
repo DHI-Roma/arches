@@ -2037,10 +2037,10 @@ class ResourceInstanceDataType(BaseDataType):
     ):
         errors = []
         if value is not None:
-            resourceXresourceIds = self.get_nodevalues(value)
-            for resourceXresourceId in resourceXresourceIds:
+            relations = self.get_nodevalues(value)
+            for rel in relations:
                 try:
-                    resourceid = resourceXresourceId["resourceId"]
+                    resourceid = rel["resourceId"]
                     uuid.UUID(resourceid)
                     if strict:
                         try:
@@ -2088,13 +2088,15 @@ class ResourceInstanceDataType(BaseDataType):
                         value, source, row_number, message, title
                     )
                     errors.append(error_message)
-        # else:
-        #     title = _("Invalid Resource Instance Datatype")
-        #     message = _("No value provided")
-        #     error_message = self.create_error_message(
-        #         value, source, row_number, message, title
-        #     )
-        #     errors.append(error_message)
+        else:
+            title = _("Invalid Resource Instance Datatype Value")
+            message = _(
+                "Invalid Value. Check that the value actually exists if it was a legacyid or uuid."
+            )
+            error_message = self.create_error_message(
+                value, source, row_number, message, title
+            )
+            errors.append(error_message)
 
         return errors
 
