@@ -37,6 +37,17 @@ class TransitiveSearchView(StandardSearchView):
             )
         }
 
+    def create_query_dict(self, query_dict):
+        # check that all searchview required linkedSearchFilters are present
+        # query_dict[self.searchview_component.componentname] = True
+        for linked_filter in self.searchview_component.config["linkedSearchFilters"]:
+            if (
+                linked_filter.get("required", False)
+                and linked_filter["componentname"] not in query_dict
+            ):
+                query_dict[linked_filter["componentname"]] = {}
+        return self.sort_query_dict(query_dict)
+
     def append_dsl(self, search_query_object, **kwargs):
         querystring_params = kwargs.get("querystring", "[]")
         search_query_object["query"].include("fromrelations")
