@@ -592,10 +592,22 @@ class Resource(ResourceInstance):
         document["date_ranges"] = []
         document["ids"] = []
         if fetch_relations:
-            self.relations = ResourceXResource.objects.filter(
-                Q(from_resource=self) | Q(to_resource=self)
+            self.fromrelations = ResourceXResource.objects.filter(
+                from_resource=self
             ).select_related("node")
-        document["relations"] = [
+            torelations_distinct_graphids = [
+                str(graphid)
+                for graphid in ResourceXResource.objects.filter(
+                    to_resource=self,
+                )
+                .values_list("from_resource_graph_id", flat=True)
+                .distinct()
+            ]
+        else:
+            torelations_distinct_graphids = [
+                {str(rxr.from_resource_graph_id) for rxr in self.torelations}
+            ]
+        document["fromrelations"] = [
             (
                 {
                     "graphid": str(rxr.to_resource_graph_id),
@@ -603,24 +615,13 @@ class Resource(ResourceInstance):
                     "nodegroupid": str(rxr.node.nodegroup_id),
                     "resourceid": str(rxr.to_resource_id),
                     "relationshiptype": str(rxr.relationshiptype),
-                    "directionality": "from",
-                    "tileid": str(rxr.tile_id),
-                    "resourcexresourceid": str(rxr.pk),
-                }
-                if rxr.from_resource_id == self.resourceinstanceid
-                else {
-                    "graphid": str(rxr.from_resource_graph_id),
-                    "nodeid": str(rxr.node_id),
-                    "nodegroupid": str(rxr.node.nodegroup_id),
-                    "resourceid": str(rxr.from_resource_id),
-                    "relationshiptype": str(rxr.inverserelationshiptype),
-                    "directionality": "to",
                     "tileid": str(rxr.tile_id),
                     "resourcexresourceid": str(rxr.pk),
                 }
             )
-            for rxr in self.relations
+            for rxr in self.fromrelations
         ]
+        document["torelations_graphids"] = torelations_distinct_graphids
         tiles_have_authoritative_data = any(
             any(val is not None for val in t.data.values()) for t in tiles
         )
