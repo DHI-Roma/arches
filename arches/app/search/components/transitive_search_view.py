@@ -133,10 +133,10 @@ class TransitiveSearchView(StandardSearchView):
 
         query_ids.extend(
             [
-                str(rxr.resourceinstanceidfrom_id)
+                str(rxr.from_resource_id)
                 for rxr in ResourceXResource.objects.filter(
-                    Q(resourceinstanceidto_id__in=toresource_ids)
-                    & Q(resourceinstancefrom_graphid_id__in=related_graphids)
+                    Q(to_resource_id__in=toresource_ids)
+                    & Q(from_resource_graph_id__in=related_graphids)
                 )
             ]
         )
