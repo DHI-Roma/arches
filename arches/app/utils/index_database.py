@@ -285,9 +285,10 @@ def index_resources_using_singleprocessing(
                 resources, chunk_size=chunk_size
             ):
                 resource.tiles = resource.prefetched_tiles
-                resource.relations = getattr(
+                resource.fromrelations = getattr(
                     resource, "prefetched_from_relations", []
-                ) + getattr(resource, "prefetched_to_relations", [])
+                )
+                resource.torelations = getattr(resource, "prefetched_to_relations", [])
                 resource.descriptor_function = resource.graph.descriptor_function
                 resource.set_node_datatypes(node_datatypes)
                 resource.set_serialized_graph(get_serialized_graph(resource.graph))

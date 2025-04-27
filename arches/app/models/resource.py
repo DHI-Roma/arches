@@ -83,7 +83,8 @@ class Resource(ResourceInstance):
         # self.resourceinstancesecurity
         # end from models.ResourceInstance
         self.tiles = []
-        self.relations = []
+        self.fromrelations = []
+        self.torelations = []
         self.descriptor_function = None
         self.serialized_graph = None
         self.node_datatypes = None
