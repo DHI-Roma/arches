@@ -319,7 +319,7 @@ class SearchEngine(object):
             for error in errors:
                 err = error["index"]
                 self.logger.warning(
-                    f"{err['error']['type']} for resourceid: {err['_id']}; {err['reason']}\n"
+                    f"{err['error']['type']} for resourceid: {err['_id']}; {err['error']['reason']}\n"
                 )
 
     def create_bulk_item(self, op_type="index", index=None, id=None, data=None):
