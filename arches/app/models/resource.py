@@ -570,17 +570,17 @@ class Resource(models.ResourceInstance):
                 {str(rxr.resourceinstancefrom_graphid_id) for rxr in self.fromrelations}
             )
         document["fromrelations"] = [
-            (
-                {
-                    "graphid": str(rxr.resourceinstanceto_graphid_id),
-                    "nodeid": str(rxr.nodeid_id),
-                    "nodegroupid": str(rxr.nodeid.nodegroup_id),
-                    "resourceid": str(rxr.resourceinstanceidto_id),
-                    "relationshiptype": str(rxr.relationshiptype),
-                    "tileid": str(rxr.tileid_id),
-                    "resourcexresourceid": str(rxr.pk),
-                }
-            )
+            {
+                "graphid": str(rxr.resourceinstanceto_graphid_id),
+                "nodeid": str(rxr.nodeid_id) if rxr.nodeid is not None else "",
+                "nodegroupid": (
+                    str(rxr.nodeid.nodegroup_id) if rxr.nodeid is not None else ""
+                ),
+                "resourceid": str(rxr.resourceinstanceidto_id),
+                "relationshiptype": str(rxr.relationshiptype),
+                "tileid": str(rxr.tileid_id) if rxr.tileid is not None else "",
+                "resourcexresourceid": str(rxr.pk),
+            }
             for rxr in self.fromrelations
         ]
         document["torelations_graphids"] = torelations_distinct_graphids
