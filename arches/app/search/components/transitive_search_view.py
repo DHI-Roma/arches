@@ -39,18 +39,26 @@ class TransitiveSearchView(StandardSearchView):
 
     def append_dsl(self, search_query_object, **kwargs):
         querystring_params = kwargs.get("querystring", "[]")
-        search_query_object["query"].include("relations")
+        search_query_object["query"].include("fromrelations")
+        search_query_object["query"].include("torelations_graphids")
         search_query_object["query"].exclude("tiles")
         transitive_graph_filter = Bool()
 
         graphids = JSONDeserializer().deserialize(querystring_params)
         if len(graphids) > 0:
-            transitive_graph_filter.filter(
+            transitive_graph_filter.should(
                 Nested(
-                    path="relations",
-                    query=Terms(field="relations.graphid", terms=graphids),
+                    path="fromrelations",
+                    query=Terms(field="fromrelations.graphid", terms=graphids),
                 )
             )
+            transitive_graph_filter.should(
+                Terms(  # checks for docs with at least one matching graphid
+                    field="torelations_graphids", terms=graphids
+                )
+            )
+            transitive_graph_filter.minimum_should_match = 1
+
             search_query_object["query"].add_query(transitive_graph_filter)
 
     def execute_query(self, search_query_object, response_object, **kwargs):
