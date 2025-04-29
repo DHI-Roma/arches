@@ -524,6 +524,13 @@ class NumberDataType(BaseDataType):
                 "provisional": provisional,
             }
         )
+        document["strings"].append(
+            {
+                "number": str(nodevalue),
+                "nodegroup_id": tile.nodegroup_id,
+                "provisional": provisional,
+            }
+        )
 
     def append_search_filters(self, value, node, query, request):
         try:
@@ -807,6 +814,14 @@ class DateDataType(BaseDataType):
                 "provisional": provisional,
             }
         )
+        document["strings"].append(
+            {
+                "string": str(nodevalue),
+                "nodegroup_id": tile.nodegroup_id,
+                "nodeid": nodeid,
+                "provisional": provisional,
+            }
+        )
 
     def append_search_filters(self, value, node, query, request):
         try:
@@ -939,6 +954,14 @@ class EDTFDataType(BaseDataType):
                             "provisional": provisional,
                         }
                     )
+                    document["strings"].append(
+                        {
+                            "string": str(edtf.lower),
+                            "nodegroup_id": tile.nodegroup_id,
+                            "nodeid": nodeid,
+                            "provisional": provisional,
+                        }
+                    )
             else:
                 dr = {}
                 if edtf.lower_fuzzy is not None:
@@ -946,6 +969,14 @@ class EDTFDataType(BaseDataType):
                     document["dates"].append(
                         {
                             "date": edtf.lower_fuzzy,
+                            "nodegroup_id": tile.nodegroup_id,
+                            "nodeid": nodeid,
+                            "provisional": provisional,
+                        }
+                    )
+                    document["strings"].append(
+                        {
+                            "string": str(edtf.lower_fuzzy),
                             "nodegroup_id": tile.nodegroup_id,
                             "nodeid": nodeid,
                             "provisional": provisional,
@@ -961,6 +992,15 @@ class EDTFDataType(BaseDataType):
                             "provisional": provisional,
                         }
                     )
+                    if not edtf.lower_fuzzy:
+                        document["strings"].append(
+                            {
+                                "string": str(edtf.upper_fuzzy),
+                                "nodegroup_id": tile.nodegroup_id,
+                                "nodeid": nodeid,
+                                "provisional": provisional,
+                            }
+                        )
                 document["date_ranges"].append(
                     {
                         "date_range": dr,
