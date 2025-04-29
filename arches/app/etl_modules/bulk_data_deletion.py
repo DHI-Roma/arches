@@ -302,6 +302,7 @@ class BulkDataDeletion(BaseBulkEditor):
                     },
                 }
 
+        celery_worker_running = task_management.check_if_celery_available()
         use_celery_bulk_delete = True
 
         load_details = {
@@ -313,7 +314,7 @@ class BulkDataDeletion(BaseBulkEditor):
         with connection.cursor() as cursor:
             event_created = self.create_load_event(cursor, load_details)
             if event_created["success"]:
-                if use_celery_bulk_delete:
+                if use_celery_bulk_delete and celery_worker_running:
                     response = self.run_bulk_task_async(request, self.loadid)
                 else:
                     response = self.run_bulk_task(
