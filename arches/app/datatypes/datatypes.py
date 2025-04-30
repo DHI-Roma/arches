@@ -954,14 +954,17 @@ class EDTFDataType(BaseDataType):
                             "provisional": provisional,
                         }
                     )
-                    document["strings"].append(
-                        {
-                            "string": str(edtf.lower),
-                            "nodegroup_id": tile.nodegroup_id,
-                            "nodeid": nodeid,
-                            "provisional": provisional,
-                        }
-                    )
+                    try:
+                        document["strings"].append(
+                            {
+                                "string": str(edtf.lower),
+                                "nodegroup_id": tile.nodegroup_id,
+                                "nodeid": nodeid,
+                                "provisional": provisional,
+                            }
+                        )
+                    except KeyError:
+                        pass
             else:
                 dr = {}
                 if edtf.lower_fuzzy is not None:
@@ -974,14 +977,17 @@ class EDTFDataType(BaseDataType):
                             "provisional": provisional,
                         }
                     )
-                    document["strings"].append(
-                        {
-                            "string": str(edtf.lower_fuzzy),
-                            "nodegroup_id": tile.nodegroup_id,
-                            "nodeid": nodeid,
-                            "provisional": provisional,
-                        }
-                    )
+                    try:
+                        document["strings"].append(
+                            {
+                                "string": str(edtf.lower_fuzzy),
+                                "nodegroup_id": tile.nodegroup_id,
+                                "nodeid": nodeid,
+                                "provisional": provisional,
+                            }
+                        )
+                    except KeyError:
+                        pass
                 if edtf.upper_fuzzy is not None:
                     dr["lte"] = edtf.upper_fuzzy
                     document["dates"].append(
@@ -993,14 +999,17 @@ class EDTFDataType(BaseDataType):
                         }
                     )
                     if not edtf.lower_fuzzy:
-                        document["strings"].append(
-                            {
-                                "string": str(edtf.upper_fuzzy),
-                                "nodegroup_id": tile.nodegroup_id,
-                                "nodeid": nodeid,
-                                "provisional": provisional,
-                            }
-                        )
+                        try:
+                            document["strings"].append(
+                                {
+                                    "string": str(edtf.upper_fuzzy),
+                                    "nodegroup_id": tile.nodegroup_id,
+                                    "nodeid": nodeid,
+                                    "provisional": provisional,
+                                }
+                            )
+                        except KeyError:
+                            pass
                 document["date_ranges"].append(
                     {
                         "date_range": dr,
@@ -1024,7 +1033,7 @@ class EDTFDataType(BaseDataType):
             add_date_to_doc(tile.data[nodeid], edtf)
 
     def append_search_filters(self, value, node, query, request):
-        def add_date_to_doc(query, edtf):
+        def add_date_to_query(query, edtf):
             invalid_filter_exception = Exception(
                 _(
                     'Only dates that specify an exact year, month, \
@@ -1081,9 +1090,9 @@ class EDTFDataType(BaseDataType):
             edtf = ExtendedDateFormat(value["val"])
             if edtf.result_set:
                 for result in edtf.result_set:
-                    add_date_to_doc(query, result)
+                    add_date_to_query(query, result)
             else:
-                add_date_to_doc(query, edtf)
+                add_date_to_query(query, edtf)
 
     def default_es_mapping(self):
         mapping = {
