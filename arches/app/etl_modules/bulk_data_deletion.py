@@ -16,6 +16,7 @@ from arches.app.models.resource import Resource
 from arches.app.models.system_settings import settings
 from arches.app.models.tile import Tile
 import arches.app.tasks as tasks
+from arches.app.utils import task_management
 from arches.app.utils.index_database import index_resources_by_transaction
 from arches.app.utils.label_based_graph_v2 import LabelBasedGraph as LabelBasedGraphV2
 
