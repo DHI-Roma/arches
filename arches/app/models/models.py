@@ -22,7 +22,7 @@ from django.utils.translation import gettext_lazy as _
 from arches.app.const import ExtensionType
 from arches.app.models.fields.i18n import I18n_TextField, I18n_JSONField
 from arches.app.models.mixins import SaveSupportsBlindOverwriteMixin
-from arches.app.models.query_expressions import UUID4
+from arches.app.models.query_expressions import JSONBPathQueryArray, UUID4
 from arches.app.models.utils import add_to_update_fields
 from arches.app.utils.betterJSONSerializer import JSONSerializer
 from arches.app.utils.module_importer import get_class_from_modulename
@@ -1714,6 +1714,11 @@ class TileModel(SaveSupportsBlindOverwriteMixin, models.Model):  # Tile
     )
     sortorder = models.IntegerField(blank=True, null=True, default=0)
     provisionaledits = JSONField(blank=True, null=True, db_column="provisionaledits")
+    localized_string_values = models.GeneratedField(
+        expression=JSONBPathQueryArray("data", models.Value("$.*.*.value")),
+        output_field=models.JSONField(),
+        db_persist=True,
+    )
 
     class Meta:
         managed = True
