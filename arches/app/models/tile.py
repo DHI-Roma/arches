@@ -628,11 +628,10 @@ class Tile(models.TileModel):
 
                 if recalculate_descriptors or index:
                     resource = Resource.objects.get(pk=self.resourceinstance_id)
-                if recalculate_descriptors:
-                    resource.save_descriptors()
-
-                if index:
-                    self.index(resource=resource)
+                    if recalculate_descriptors:
+                        resource.save_descriptors()
+                    if index:
+                        self.index(resource=resource)
             except IntegrityError as e:
                 logger.error(e)
 
