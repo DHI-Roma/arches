@@ -568,6 +568,7 @@ class Tile(models.TileModel):
         se = SearchEngineFactory().create()
         request = kwargs.pop("request", None)
         index = kwargs.pop("index", True)
+        recalculate_descriptors = kwargs.pop("recalculate_descriptors", True)
         transaction_id = kwargs.pop("transaction_id", None)
         provisional_edit_log_details = kwargs.pop("provisional_edit_log_details", None)
         for tile in self.tiles:
@@ -615,11 +616,12 @@ class Tile(models.TileModel):
                     datatype = self.datatype_factory.get_instance(node.datatype)
                     datatype.post_tile_delete(self, nodeid, index=index)
 
-                resource = Resource.objects.get(pk=self.resourceinstance_id)
-                resource.save_descriptors()
-
-                if index:
-                    self.index(resource=resource)
+                if index or recalculate_descriptors:
+                    resource = Resource.objects.get(pk=self.resourceinstance_id)
+                    if recalculate_descriptors:
+                        resource.save_descriptors()
+                    if index:
+                        self.index(resource=resource)
             except IntegrityError as e:
                 logger.error(e)
 
