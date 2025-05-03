@@ -208,7 +208,12 @@ class BulkDataDeletion(BaseBulkEditor):
             for tile in tiles.iterator(chunk_size=2000):
                 request = HttpRequest()
                 request.user = user
-                tile.delete(request=request, index=False, transaction_id=loadid)
+                tile.delete(
+                    request=request,
+                    index=False,
+                    transaction_id=loadid,
+                    recalculate_descriptors=False,
+                )
             result["success"] = True
         except Exception as e:
             logger.exception(e)
