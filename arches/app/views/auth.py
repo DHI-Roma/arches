@@ -758,7 +758,9 @@ class ExternalOauth(View):
     )  # exempt; returned from other oauth2 authorization server, handled by 'oauth_state' in session
     def callback(request):
         next_url = (
-            request.session["next"] if "next" in request.session else settings.LOGIN_REDIRECT_URL
+            request.session["next"]
+            if "next" in request.session
+            else settings.LOGIN_REDIRECT_URL
         )
         user = authenticate(
             request, username=request.session["user"], sso_authentication=True
