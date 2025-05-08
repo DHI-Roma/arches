@@ -1303,7 +1303,7 @@ class ResourceXResource(SaveSupportsBlindOverwriteMixin, models.Model):
     def delete(self, *args, **kwargs):
         # update the resource-instance tile by removing any references to a deleted resource
         deletedResourceId = kwargs.pop("deletedResourceId", None)
-        if deletedResourceId and self.tile and self.node:
+        if deletedResourceId and self.tile and self.node_id:
             newTileData = []
             data = self.tile.data[str(self.node_id)]
             if type(data) != list:
