@@ -443,6 +443,7 @@ class Tile(models.TileModel):
     def save(self, *args, **kwargs):
         request = kwargs.pop("request", None)
         index = kwargs.pop("index", True)
+        recalculate_descriptors = kwargs.pop("recalculate_descriptors", True)
         user = kwargs.pop("user", None)
         new_resource_created = kwargs.pop("new_resource_created", False)
         resource_creation = kwargs.pop("resource_creation", False)
@@ -559,11 +560,12 @@ class Tile(models.TileModel):
                     **kwargs,
                 )
 
-            resource = Resource.objects.get(pk=self.resourceinstance_id)
-            resource.save_descriptors(context={"tile": self})
-
-            if index:
-                self.index(resource=resource)
+            if recalculate_descriptors or index:
+                resource = Resource.objects.get(pk=self.resourceinstance_id)
+                if recalculate_descriptors:
+                    resource.save_descriptors()
+                if index:
+                    self.index(resource=resource)
 
     def populate_missing_nodes(self):
         first_node = next(iter(self.data.items()), None)
