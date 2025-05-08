@@ -573,13 +573,7 @@ class Resource(models.ResourceInstance):
             {
                 "graphid": str(rxr.resourceinstanceto_graphid_id),
                 "nodeid": str(rxr.nodeid_id) if rxr.nodeid is not None else "",
-                "nodegroupid": (
-                    str(rxr.nodeid.nodegroup_id) if rxr.nodeid is not None else ""
-                ),
                 "resourceid": str(rxr.resourceinstanceidto_id),
-                "relationshiptype": str(rxr.relationshiptype),
-                "tileid": str(rxr.tileid_id) if rxr.tileid is not None else "",
-                "resourcexresourceid": str(rxr.pk),
             }
             for rxr in self.fromrelations
         ]
