@@ -547,6 +547,7 @@ class Tile(models.TileModel):
                     request=request,
                     resource_creation=resource_creation,
                     index=False,
+                    recalculate_descriptors=recalculate_descriptors,
                     **kwargs,
                 )
 

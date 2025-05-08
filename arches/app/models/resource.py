@@ -308,8 +308,10 @@ class Resource(models.ResourceInstance):
                 index=False,
                 resource_creation=True,
                 transaction_id=transaction_id,
+                recalculate_descriptors=False,
                 context=context,
             )
+        self.save_descriptors()
 
         if index is True:
             self.index(context)
