@@ -677,7 +677,7 @@ class Resource(models.ResourceInstance):
 
         return document, terms
 
-    def delete(self, user={}, index=True, transaction_id=None):
+    def delete(self, user={}, index=True, transaction_id=None, fetch_relations=True):
         """
         Deletes a single resource and any related indexed data
 
@@ -714,11 +714,15 @@ class Resource(models.ResourceInstance):
             permit_deletion = True
 
         if permit_deletion is True:
-            for related_resource in models.ResourceXResource.objects.filter(
-                Q(from_resource_id=self.resourceinstanceid)
-                | Q(to_resource_id=self.resourceinstanceid)
-            ):
-                related_resource.delete(deletedResourceId=self.resourceinstanceid)
+            if fetch_relations:
+                for related_resource in models.ResourceXResource.objects.filter(
+                    Q(from_resource_id=self.resourceinstanceid)
+                    | Q(to_resource_id=self.resourceinstanceid)
+                ).select_related("tile"):
+                    related_resource.delete(deletedResourceId=self.resourceinstanceid)
+            else:
+                for related_resource in self.fromrelations + self.torelations:
+                    related_resource.delete(deletedResourceId=self.resourceinstanceid)
 
             if index:
                 self.delete_index()
