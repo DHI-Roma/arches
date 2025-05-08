@@ -612,13 +612,7 @@ class Resource(ResourceInstance):
                 {
                     "graphid": str(rxr.to_resource_graph_id),
                     "nodeid": str(rxr.node_id) if rxr.node is not None else "",
-                    "nodegroupid": (
-                        str(rxr.node.nodegroup_id) if rxr.node is not None else ""
-                    ),
                     "resourceid": str(rxr.to_resource_id),
-                    "relationshiptype": str(rxr.relationshiptype),
-                    "tileid": str(rxr.tile_id) if rxr.tile is not None else "",
-                    "resourcexresourceid": str(rxr.pk),
                 }
             )
             for rxr in self.fromrelations

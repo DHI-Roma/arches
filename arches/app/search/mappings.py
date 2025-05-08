@@ -287,11 +287,7 @@ def prepare_search_index(create=False):
                     "properties": {
                         "graphid": {"type": "keyword"},
                         "nodeid": {"type": "keyword"},
-                        "nodegroupid": {"type": "keyword"},
                         "resourceid": {"type": "keyword"},
-                        "relationshiptype": {"type": "keyword"},
-                        "tileid": {"type": "keyword"},
-                        "resourcexresourceid": {"type": "keyword"},
                     },
                 },
                 "torelations_graphids": {
