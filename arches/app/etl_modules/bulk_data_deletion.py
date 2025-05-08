@@ -16,7 +16,10 @@ from arches.app.models.resource import Resource
 from arches.app.models.system_settings import settings
 from arches.app.models.tile import Tile
 import arches.app.tasks as tasks
-from arches.app.utils.index_database import index_resources_by_transaction
+from arches.app.utils.index_database import (
+    index_resources_by_transaction,
+    optimize_resource_iteration,
+)
 from arches.app.utils.label_based_graph_v2 import LabelBasedGraph as LabelBasedGraphV2
 
 logger = logging.getLogger(__name__)
@@ -176,8 +179,10 @@ class BulkDataDeletion(BaseBulkEditor):
 
             if verbose is True:
                 bar = pyprind.ProgBar(deleted_count)
-            for resource in resources.iterator(chunk_size=2000):
-                resource.delete(user=user, index=False, transaction_id=loadid)
+            for resource in optimize_resource_iteration(resources, chunk_size=2000):
+                resource.delete(
+                    user=user, index=False, transaction_id=loadid, fetch_relations=False
+                )
                 if verbose is True:
                     bar.update()
 
