@@ -100,7 +100,7 @@ along with this program. If not, see <http://www.gnu.org/licenses/>.
                         {% endif %}
                         {% if user.username == 'anonymous' %}
                             <li>
-                                <a class="application-login" id="auth-link" href="{% url 'auth' %}{% if user.username != 'anonymous' %}&logout=true{% endif %}">{% trans "Sign in" %}</a>
+                                <a class="application-login" id="auth-link" href="{% url 'auth' %}">{% trans "Sign in" %}</a>
                             </li>
                         {% else %}
                             <li>
@@ -109,7 +109,7 @@ along with this program. If not, see <http://www.gnu.org/licenses/>.
                                 </a>
                             </li>
                             <li>
-                                <a class="application-login" href="{% url 'auth' %}{% if user.username != 'anonymous' %}&logout=true{% endif %}">{% trans 'Log off' %}</a>
+                                <a class="application-login" href="{% url 'auth' %}?logout=true">{% trans 'Log off' %}</a>
                             </li>
                         {% endif %}
                         {% if show_language_swtich %}
