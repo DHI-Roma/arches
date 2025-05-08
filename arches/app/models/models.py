@@ -1312,8 +1312,11 @@ class ResourceXResource(SaveSupportsBlindOverwriteMixin, models.Model):
                 if relatedresourceItem:
                     if relatedresourceItem["resourceId"] != str(deletedResourceId):
                         newTileData.append(relatedresourceItem)
-            self.tile.data[str(self.node_id)] = newTileData
-            self.tile.save()
+            if len(newTileData):
+                self.tile.data[str(self.node_id)] = newTileData
+                self.tile.save()
+            else:
+                self.tile.delete(index=False, recalculate_descriptors=False)
 
         super(ResourceXResource, self).delete()
 
