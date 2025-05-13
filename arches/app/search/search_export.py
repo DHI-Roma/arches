@@ -327,8 +327,7 @@ class SearchResultsExporter(object):
         search_history_obj.downloadfile.name = name
         f = BytesIO(zip_stream)
         download = File(f)
-        storage = default_storage
-        storage.save(search_history_obj.downloadfile.name, download)
+        search_history_obj.downloadfile.save(name, download)
         search_history_obj.save()
         return search_history_obj.searchexportid
 
