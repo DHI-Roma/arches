@@ -894,6 +894,10 @@ class ResourceDescriptors(View):
         return result["value"]
 
     def get(self, request, resourceid=None):
+        try:
+            uuid.UUID(resourceid)
+        except ValueError:
+            return HttpResponseBadRequest()
         if (
             Resource.objects.filter(pk=resourceid)
             .exclude(pk=settings.SYSTEM_SETTINGS_RESOURCE_ID)
