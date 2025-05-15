@@ -16,7 +16,6 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <http://www.gnu.org/licenses/>.
 """
 
-import os
 import csv
 import datetime
 import logging
@@ -25,7 +24,6 @@ from io import BytesIO
 import re
 from django.contrib.gis.geos import GeometryCollection, GEOSGeometry
 from django.core.files import File
-from django.core.files.storage import default_storage
 from django.utils.translation import gettext as _
 from django.urls import reverse, resolve, get_script_prefix
 from arches.app.models import models
