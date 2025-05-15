@@ -133,6 +133,7 @@ class Tile(models.TileModel):
         provisional_edit_log_details=None,
         transaction_id=None,
         new_resource_created=False,
+        displayname=None,
     ):
         if new_resource_created:
             timestamp = datetime.datetime.now()
@@ -170,9 +171,12 @@ class Tile(models.TileModel):
         edit.user_firstname = getattr(user, "first_name", "")
         edit.user_lastname = getattr(user, "last_name", "")
         edit.user_username = getattr(user, "username", "")
-        edit.resourcedisplayname = Resource.objects.get(
-            resourceinstanceid=self.resourceinstance.resourceinstanceid
-        ).displayname()
+        if not displayname:
+            edit.resourcedisplayname = Resource.objects.get(
+                resourceinstanceid=self.resourceinstance.resourceinstanceid
+            ).displayname()
+        else:
+            edit.resourcedisplayname = displayname
         edit.oldvalue = old_value
         edit.newvalue = new_value
         edit.timestamp = timestamp
@@ -447,6 +451,9 @@ class Tile(models.TileModel):
         user = kwargs.pop("user", None)
         new_resource_created = kwargs.pop("new_resource_created", False)
         resource_creation = kwargs.pop("resource_creation", False)
+        resource_proxy_instance = kwargs.pop(
+            "resource_proxy_instance", Resource(pk=self.resourceinstance_id)
+        )
         note = "resource creation" if resource_creation else None
         context = kwargs.pop("context", None)
         transaction_id = kwargs.pop("transaction_id", None)
@@ -525,6 +532,26 @@ class Tile(models.TileModel):
             self.ensure_userprofile_exists(request)
             self.datatype_post_save_actions(request)
             self.__postSave(request, context=context)
+
+            for tile in self.tiles:
+                tile.resourceinstance = self.resourceinstance
+                tile.parenttile = self
+                tile.save(
+                    *args,
+                    request=request,
+                    resource_creation=resource_creation,
+                    index=False,
+                    recalculate_descriptors=recalculate_descriptors,
+                    resource_proxy_instance=resource_proxy_instance,
+                    **kwargs,
+                )
+
+            if recalculate_descriptors or index:
+                if recalculate_descriptors:
+                    resource_proxy_instance.save_descriptors()
+                if index:
+                    self.index(resource=resource_proxy_instance)
+
             if creating_new_tile is True:
                 self.save_edit(
                     user=user,
@@ -536,6 +563,7 @@ class Tile(models.TileModel):
                     transaction_id=transaction_id,
                     new_resource_created=new_resource_created,
                     note=note,
+                    displayname=resource_proxy_instance.displayname(),
                 )
             else:
                 self.save_edit(
@@ -547,26 +575,8 @@ class Tile(models.TileModel):
                     oldprovisionalvalue=oldprovisionalvalue,
                     provisional_edit_log_details=provisional_edit_log_details,
                     transaction_id=transaction_id,
+                    displayname=resource_proxy_instance.displayname(),
                 )
-
-            for tile in self.tiles:
-                tile.resourceinstance = self.resourceinstance
-                tile.parenttile = self
-                tile.save(
-                    *args,
-                    request=request,
-                    resource_creation=resource_creation,
-                    index=False,
-                    recalculate_descriptors=recalculate_descriptors,
-                    **kwargs,
-                )
-
-            if recalculate_descriptors or index:
-                resource = Resource.objects.get(pk=self.resourceinstance_id)
-                if recalculate_descriptors:
-                    resource.save_descriptors()
-                if index:
-                    self.index(resource=resource)
 
     def populate_missing_nodes(self):
         first_node = next(iter(self.data.items()), None)
