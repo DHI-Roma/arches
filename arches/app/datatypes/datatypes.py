@@ -2399,7 +2399,7 @@ class ResourceInstanceDataType(BaseDataType):
             case _:  # default case (handles str/legacyid and any other types)
                 if value_type != "str":
                     converted_value = [str(val) for val in converted_value]
-                boolquery.must(
+                boolquery.filter(
                     Terms(field="legacyid.keyword", terms=converted_value)
                 )  # exact match on keyword
                 query.add_query(boolquery)
