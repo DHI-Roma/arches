@@ -444,6 +444,7 @@ def index_custom_indexes(
     clear_index=True,
     batch_size=settings.BULK_IMPORT_BATCH_SIZE,
     quiet=False,
+    **kwargs,
 ):
     """
     Indexes any custom indexes, optionally by name
@@ -460,11 +461,13 @@ def index_custom_indexes(
         for index in settings.ELASTICSEARCH_CUSTOM_INDEXES:
             es_index = import_class_from_string(index["module"])(index["name"])
             es_index.reindex(
-                clear_index=clear_index, batch_size=batch_size, quiet=quiet
+                clear_index=clear_index, batch_size=batch_size, quiet=quiet, **kwargs
             )
     else:
         es_index = get_index(index_name)
-        es_index.reindex(clear_index=clear_index, batch_size=batch_size, quiet=quiet)
+        es_index.reindex(
+            clear_index=clear_index, batch_size=batch_size, quiet=quiet, **kwargs
+        )
 
 
 def index_concepts(clear_index=True, batch_size=settings.BULK_IMPORT_BATCH_SIZE):
