@@ -50,6 +50,7 @@ class Graph(models.GraphModel):
     """
 
     objects = GraphQuerySet.as_manager()
+    saved_spatial_view_geometry_nodes = None
 
     class Meta:
         proxy = True
@@ -2523,6 +2524,15 @@ class Graph(models.GraphModel):
             if draft_graph:
                 draft_graph.delete()
 
+            views = models.SpatialView.objects.filter(geometrynode__graph=self.pk)
+            orphaned_spatial_view_geometry_nodes = {}
+            for view in views:
+                orphaned_spatial_view_geometry_nodes[view.spatialviewid] = (
+                    view.geometrynode_id
+                )
+                view.geometrynode = None
+                view.save()
+
             self.delete_associated_entities()
 
             for serialized_nodegroup in serialized_graph["nodegroups"]:
@@ -2612,7 +2622,11 @@ class Graph(models.GraphModel):
 
             updated_graph.create_draft_graph()
 
-            return Graph.objects.get(pk=updated_graph.pk)
+            return_graph = Graph.objects.get(pk=updated_graph.pk)
+            return_graph.saved_spatial_view_geometry_nodes = (
+                orphaned_spatial_view_geometry_nodes
+            )
+            return return_graph
 
     def publish(self, user=None, notes=None):
         """
@@ -2648,6 +2662,21 @@ class Graph(models.GraphModel):
                 )
 
             translation.deactivate()
+
+            # after publishing, we need to update any existing spatial views to put back the geometry node ids
+            # if they were removed prior
+            if self.saved_spatial_view_geometry_nodes:
+                views = models.SpatialView.objects.filter(
+                    spatialviewid__in=list(
+                        self.saved_spatial_view_geometry_nodes.keys()
+                    )
+                )
+                for view in views:
+                    view.geometrynode_id = self.saved_spatial_view_geometry_nodes[
+                        view.spatialviewid
+                    ]
+                    view.save()
+                self.saved_spatial_view_geometry_nodes = None
 
 
 class GraphPublicationError(Exception):

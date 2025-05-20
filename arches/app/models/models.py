@@ -4,6 +4,7 @@ import logging
 import sys
 import traceback
 import uuid
+import pgtrigger
 
 import django.utils.timezone
 from django.contrib.auth.models import Group, User
@@ -18,6 +19,7 @@ from django.db.models.expressions import CombinedExpression
 from django.db.models.functions import Concat, Lower
 from django.utils import translation
 from django.utils.translation import gettext_lazy as _
+
 
 from arches.app.const import ExtensionType
 from arches.app.models.fields.i18n import I18n_TextField, I18n_JSONField
@@ -2356,13 +2358,13 @@ class SpatialView(models.Model):
     )  # provide a description of the spatial view
     geometrynode = models.ForeignKey(
         Node,
-        on_delete=models.CASCADE,
+        on_delete=models.PROTECT,
         db_column="geometrynodeid",
         limit_choices_to={
             "datatype": "geojson-feature-collection",
             "source_identifier__isnull": True,
         },
-        null=False,
+        null=True,
     )
     ismixedgeometrytypes = models.BooleanField(default=False)
     language = models.ForeignKey(
@@ -2383,6 +2385,134 @@ class SpatialView(models.Model):
     class Meta:
         managed = True
         db_table = "spatial_views"
+        triggers = [
+            pgtrigger.Composer(
+                name="__arches_trg_update_spatial_views",
+                when=pgtrigger.After,
+                operation=pgtrigger.Update | pgtrigger.Delete | pgtrigger.Insert,
+                declare=[
+                    ("sv_perform", "text"),
+                    ("valid_geom_nodeid", "boolean"),
+                    ("has_att_nodes", "integer"),
+                    ("valid_att_nodeids", "boolean"),
+                    ("valid_language_count", "integer"),
+                ],
+                func=pgtrigger.Func(
+                    """
+                    sv_perform := '';
+                    valid_geom_nodeid := false;
+                    has_att_nodes := 0;
+                    valid_att_nodeids := false;
+                    valid_language_count := 0;
+
+                    if tg_op = 'INSERT' or tg_op = 'UPDATE' then
+                        if new.geometrynodeid is null then
+                            return new;
+                        end if;
+                        valid_geom_nodeid := (select count(*) from nodes where nodeid = new.geometrynodeid and datatype = 'geojson-feature-collection') > 0;
+                        if valid_geom_nodeid is false then
+                            raise exception 'geometrynodeid is not a valid nodeid';
+                        end if;
+
+
+                        if jsonb_typeof(new.attributenodes::jsonb) = 'array' then
+                            has_att_nodes := jsonb_array_length(new.attributenodes);
+                            if has_att_nodes = 0 then
+                                raise exception 'attributenodes needs at least one attribute dict';
+                            else
+                                valid_att_nodeids := (
+                                    with attribute_nodes as (
+                                        select * from jsonb_to_recordset(new.attributenodes) as x(nodeid uuid, description text)
+                                    )
+                                    select count(*) from attribute_nodes att join nodes n1 on att.nodeid = n1.nodeid
+                                    ) > 0;
+
+                                if valid_att_nodeids is false then
+                                    raise exception 'attributenodes contains an invalid nodeid';
+                                end if;
+                            end if;
+                        else
+                            raise exception 'attributenodes needs to be an array';
+                        end if;
+                        ----------------------------------------------------------------------------------------------
+                        -- check language code is valid
+                        select count(pg.languageid)
+                        into valid_language_count
+                        from published_graphs pg
+                            join graphs_x_published_graphs gxpg on pg.publicationid = gxpg.publicationid
+                            join graphs g on gxpg.publicationid = g.publicationid
+                        where g.graphid in (select graphid from nodes where nodeid = new.geometrynodeid)
+                            and pg.languageid = new.languageid;
+
+                        if valid_language_count = 0 then
+                            raise exception 'language is not valid for this graph';
+                        end if;
+
+                    end if;
+
+
+                    if tg_op = 'DELETE' then
+                        sv_perform := sv_perform || format(
+                            'select __arches_delete_spatial_view(%L,%L);'
+                            , old.slug
+                            , old.schema);
+
+                        if sv_perform <> '' then
+                            execute sv_perform;
+                        end if;
+
+                        return old;
+
+                    elsif tg_op = 'INSERT' then
+                        if new.isactive = true then
+                            sv_perform := sv_perform || format(
+                                'select __arches_create_spatial_view(%L, %L::uuid, %L::jsonb, %L, %L, %L, %L);'
+                                , new.slug
+                                , new.geometrynodeid
+                                , new.attributenodes
+                                , new.schema
+                                , new.description
+                                , new.ismixedgeometrytypes
+                                , new.languageid);
+                        end if;
+
+                        if sv_perform <> '' then
+                            execute sv_perform;
+                        end if;
+
+                        return new;
+
+                    elsif tg_op = 'UPDATE' then
+
+                        if new.isactive = true then
+                            sv_perform := sv_perform || format(
+                                'select __arches_update_spatial_view(%L, %L, %L, %L::uuid, %L::jsonb, %L, %L, %L);'
+                                , old.slug
+                                , old.schema
+                                , new.slug
+                                , new.geometrynodeid
+                                , new.attributenodes
+                                , new.schema
+                                , new.description
+                                , new.ismixedgeometrytypes
+                                , new.languageid);
+                        else
+                            sv_perform := sv_perform || format(
+                                'select __arches_delete_spatial_view(%L,%L);'
+                                , old.slug
+                                , old.schema);
+                        end if;
+
+                        if sv_perform <> '' then
+                            execute sv_perform;
+                        end if;
+
+                        return new;
+                    end if;
+                    """
+                ),
+            )
+        ]
 
     def clean(self):
         """
@@ -2396,6 +2526,11 @@ class SpatialView(models.Model):
             node_ids = set(node["nodeid"] for node in self.attributenodes)
         except (KeyError, TypeError):
             raise ValidationError("attributenodes must be a list of node objects")
+
+        if not self.geometrynode:
+            raise ValidationError(
+                "Geometry node must be set to a valid geojson-feature-collection node"
+            )
 
         found_graph_nodes = Node.objects.filter(pk__in=node_ids, graph=graph)
         if len(node_ids) != found_graph_nodes.count():
