@@ -452,7 +452,7 @@ class Tile(models.TileModel):
         new_resource_created = kwargs.pop("new_resource_created", False)
         resource_creation = kwargs.pop("resource_creation", False)
         resource_proxy_instance = kwargs.pop(
-            "resource_proxy_instance", Resource(pk=self.resourceinstance_id)
+            "resource_proxy_instance", Resource.objects.get(pk=self.resourceinstance_id)
         )
         note = "resource creation" if resource_creation else None
         context = kwargs.pop("context", None)
