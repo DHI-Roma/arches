@@ -884,7 +884,11 @@ class Node(SaveSupportsBlindOverwriteMixin, models.Model):
         on_delete=models.CASCADE,
     )
     graph = models.ForeignKey(
-        GraphModel, db_column="graphid", blank=True, null=True, on_delete=models.CASCADE
+        GraphModel,
+        db_column="graphid",
+        blank=True,
+        null=False,
+        on_delete=models.CASCADE,
     )
     config = I18n_JSONField(blank=True, null=True, db_column="config")
     issearchable = models.BooleanField(default=True)
