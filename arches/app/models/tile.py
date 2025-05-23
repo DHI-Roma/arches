@@ -603,6 +603,7 @@ class Tile(models.TileModel):
             user_is_reviewer = user_is_resource_reviewer(user)
         except AttributeError:  # no user
             user = None
+            user_is_reviewer = False
 
         if user_is_reviewer is True or self.user_owns_provisional(user):
             if index:
