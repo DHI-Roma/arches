@@ -13,7 +13,7 @@ from arches.app.models import models
 from arches.app.models.resource import Resource
 from arches.app.models.system_settings import settings
 from arches.app.search.search_engine_factory import SearchEngineInstance as se
-from arches.app.search.elasticsearch_dsl_builder import Query, Term
+from arches.app.search.elasticsearch_dsl_builder import Query, Term, Bool, Terms
 from arches.app.search.base_index import get_index
 from arches.app.search.mappings import TERMS_INDEX, CONCEPTS_INDEX, RESOURCES_INDEX
 from arches.app.datatypes.datatypes import DataTypeFactory
@@ -674,3 +674,52 @@ def index_resources_by_time(
             title="time {}".format(start_time),
             recalculate_descriptors=recalculate_descriptors,
         )
+
+
+def index_tile_deletion_by_transaction(
+    transaction_id,
+    batch_size=settings.BULK_IMPORT_BATCH_SIZE,
+):
+    """
+    Bulk delete index for tiles
+
+    Keyword Arguments:
+    transaction_id -- the transaction id to delete
+    batch_size -- the number of records to index as a group, the larger the number to more memory required
+    """
+
+    try:
+        uuid.UUID(transaction_id)
+    except ValueError:
+        logger.error("A transaction id must be a valid uuid")
+        return
+
+    transaction_changes = EditLog.objects.filter(
+        transactionid=transaction_id,
+        edittype="tile create",
+    )
+    number_of_db_changes = transaction_changes.count()
+    to_delete_tileids_iter = transaction_changes.values_list(
+        "tileinstanceid", flat=True
+    ).iterator(chunk_size=batch_size)
+
+    batch = []
+    for tileid in to_delete_tileids_iter:
+        batch.append(tileid)
+        if len(batch) == batch_size:
+            query = Query(se)
+            bool_query = Bool()
+            bool_query.filter(Terms(field="tileid", terms=batch))
+            query.add_query(bool_query)
+            query.delete(index=TERMS_INDEX)
+            batch.clear()
+
+    if len(batch):
+        query = Query(se)
+        bool_query = Bool()
+        bool_query.filter(Terms(field="tileid", terms=batch))
+        query.add_query(bool_query)
+        query.delete(index=TERMS_INDEX)
+        batch.clear()
+
+    return number_of_db_changes
