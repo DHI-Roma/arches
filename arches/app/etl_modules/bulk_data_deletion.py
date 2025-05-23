@@ -6,8 +6,8 @@ import uuid
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from django.db import connection
-from django.http import HttpRequest
 from django.utils.translation import gettext as _
+from arches.app.utils import task_management
 from arches.app.etl_modules.base_data_editor import BaseBulkEditor
 from arches.app.etl_modules.decorators import load_data_async
 from arches.app.etl_modules.save import get_resourceids_from_search_url
@@ -211,10 +211,8 @@ class BulkDataDeletion(BaseBulkEditor):
             else:
                 tiles = Tile.objects.filter(nodegroup_id=nodegroupid)
             for tile in tiles.iterator(chunk_size=2000):
-                request = HttpRequest()
-                request.user = user
                 tile.delete(
-                    request=request,
+                    user=user,
                     index=False,
                     transaction_id=loadid,
                     recalculate_descriptors=False,
@@ -312,7 +310,7 @@ class BulkDataDeletion(BaseBulkEditor):
                     },
                 }
 
-        use_celery_bulk_delete = True
+        celery_worker_running = task_management.check_if_celery_available()
 
         load_details = {
             "graph": graph_name,
@@ -323,7 +321,7 @@ class BulkDataDeletion(BaseBulkEditor):
         with connection.cursor() as cursor:
             event_created = self.create_load_event(cursor, load_details)
             if event_created["success"]:
-                if use_celery_bulk_delete:
+                if celery_worker_running:
                     response = self.run_bulk_task_async(request, self.loadid)
                 else:
                     response = self.run_bulk_task(
