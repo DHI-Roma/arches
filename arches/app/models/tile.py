@@ -570,6 +570,7 @@ class Tile(models.TileModel):
     def delete(self, *args, **kwargs):
         se = SearchEngineFactory().create()
         request = kwargs.pop("request", None)
+        user = kwargs.pop("user", None)
         index = kwargs.pop("index", True)
         recalculate_descriptors = kwargs.pop("recalculate_descriptors", True)
         transaction_id = kwargs.pop("transaction_id", None)
@@ -577,7 +578,8 @@ class Tile(models.TileModel):
         for tile in self.tiles:
             tile.delete(*args, request=request, **kwargs)
         try:
-            user = request.user
+            if user is None and request is not None:
+                user = request.user
             user_is_reviewer = user_is_resource_reviewer(user)
         except AttributeError:  # no user
             user = None
