@@ -20,6 +20,7 @@ import os
 import uuid
 from arches.management.commands import utils
 from arches.app.models import models
+from django.contrib.auth.models import User
 from django.core.management.base import BaseCommand, CommandError
 from django.db.utils import IntegrityError
 from arches.app.utils import transaction
