@@ -539,9 +539,11 @@ class Tile(models.TileModel):
                 tile.save(
                     *args,
                     request=request,
+                    user=user,
                     resource_creation=resource_creation,
                     index=False,
                     recalculate_descriptors=recalculate_descriptors,
+                    transaction_id=transaction_id,
                     resource_proxy_instance=resource_proxy_instance,
                     **kwargs,
                 )
@@ -596,7 +598,15 @@ class Tile(models.TileModel):
         transaction_id = kwargs.pop("transaction_id", None)
         provisional_edit_log_details = kwargs.pop("provisional_edit_log_details", None)
         for tile in self.tiles:
-            tile.delete(*args, request=request, **kwargs)
+            tile.delete(
+                *args,
+                request=request,
+                user=user,
+                index=index,
+                recalculate_descriptors=recalculate_descriptors,
+                transaction_id=transaction_id,
+                **kwargs,
+            )
         try:
             if user is None and request is not None:
                 user = request.user
