@@ -6,8 +6,13 @@ from arches.app.models.models import IIIFManifest, EditLog, WorkflowHistory
 from arches.app.utils.index_database import (
     index_resources_by_transaction,
     optimize_resource_iteration,
+    index_tile_deletion_by_transaction,
 )
 from django.db import transaction, DatabaseError
+from django.db.models import Func, F
+from arches.app.search.search_engine_factory import SearchEngineInstance as se
+from arches.app.search.mappings import TERMS_INDEX, RESOURCES_INDEX
+from arches.app.search.elasticsearch_dsl_builder import Query, Bool, Terms, Nested
 
 # Get an instance of a logger
 logger = logging.getLogger(__name__)
@@ -29,50 +34,59 @@ def reverse_edit_log_entries(transaction_id):
         + tile_create_changes.count()
     )
 
+    # cast resourceinstanceid to UUID
+    resource_create_changes = resource_create_changes.annotate(
+        resourceinstanceid_uuid=Func(F("resourceinstanceid"), function="UUID")
+    )
     created_resources_query_set = Resource.objects.filter(
         resourceinstanceid__in=resource_create_changes.values_list(
-            "resourceinstanceid", flat=True
+            "resourceinstanceid_uuid", flat=True
         )
     )
 
-    try:
-        with transaction.atomic():
-            for resource in optimize_resource_iteration(
-                created_resources_query_set, chunk_size=2000
-            ):
-                resource.delete(
-                    fetch_relations=False,
-                    transaction_id=revserse_operation_transactionid,
-                )
+    for resource in optimize_resource_iteration(
+        created_resources_query_set, chunk_size=2000
+    ):
+        resource.delete(
+            fetch_relations=False,
+            transaction_id=revserse_operation_transactionid,
+        )
 
-            for tile in Tile.objects.filter(
-                tileid__in=tile_create_changes.values_list("tileinstanceid", flat=True)
-            ):
-                tile.delete(
-                    recalculate_descriptors=False,
-                    transaction_id=revserse_operation_transactionid,
-                )
+    # cast tileinstanceid to UUID
+    tile_create_changes = tile_create_changes.annotate(
+        tileinstanceid_uuid=Func(F("tileinstanceid"), function="UUID")
+    )
 
-            for tile in Tile.objects.filter(
-                tileid__in=tile_edit_changes.values_list("tileinstanceid", flat=True)
-            ):
-                tile.data = tile_edit_changes.get(
-                    tileinstanceid=str(tile.tileid)
-                ).oldvalue
-                tile.save(
-                    index=False,
-                    recalculate_descriptors=False,
-                    transaction_id=revserse_operation_transactionid,
-                )
-        if tile_edit_changes.count() > 0:
-            index_resources_by_transaction(
-                transaction_id,
-                recalculate_descriptors=True,
+    for tile in Tile.objects.filter(
+        tileid__in=tile_create_changes.values_list("tileinstanceid_uuid", flat=True)
+    ):
+        tile.delete(
+            recalculate_descriptors=False,
+            index=False,
+            transaction_id=revserse_operation_transactionid,
+        )
+    index_tile_deletion_by_transaction(transaction_id)
+
+    with transaction.atomic():
+        # cast tileinstanceid to UUID
+        tile_edit_changes = tile_edit_changes.annotate(
+            tileinstanceid_uuid=Func(F("tileinstanceid"), function="UUID")
+        )
+
+        for tile in Tile.objects.filter(
+            tileid__in=tile_edit_changes.values_list("tileinstanceid_uuid", flat=True)
+        ):
+            tile.data = tile_edit_changes.get(tileinstanceid=str(tile.tileid)).oldvalue
+            tile.save(
+                index=False,
+                recalculate_descriptors=False,
+                transaction_id=revserse_operation_transactionid,
             )
-
-    except DatabaseError:
-        logger.error("Error connecting to database")
-        number_of_db_changes = 0
+    if tile_edit_changes.count() > 0:
+        index_resources_by_transaction(
+            transaction_id,
+            recalculate_descriptors=True,
+        )
 
     return number_of_db_changes
 
