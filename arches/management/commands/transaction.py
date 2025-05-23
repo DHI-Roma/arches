@@ -40,4 +40,5 @@ class Command(BaseCommand):
             self.reverse(options["transaction_id"])
 
     def reverse(self, transaction_id):
-        print(transaction.reverse_edit_log_entries(transaction_id))
+        user = User.objects.get(username="admin")
+        print(transaction.reverse_edit_log_entries(transaction_id, user=user))
