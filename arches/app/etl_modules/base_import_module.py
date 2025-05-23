@@ -63,14 +63,26 @@ class BaseImportModule:
     def reverse_load(self, loadid):
         with connection.cursor() as cursor:
             cursor.execute(
+                """SELECT status FROM load_event WHERE loadid = %s""",
+                [loadid],
+            )
+            original_status = cursor.fetchone()[0]
+            cursor.execute(
                 """UPDATE load_event SET status = %s WHERE loadid = %s""",
                 ("reversing", loadid),
             )
-            resources_changed_count = reverse_edit_log_entries(loadid)
-            cursor.execute(
-                """UPDATE load_event SET status = %s, load_details = load_details::jsonb || ('{"resources_removed":' || %s || '}')::jsonb WHERE loadid = %s""",
-                ("unloaded", resources_changed_count, loadid),
-            )
+            try:
+                resources_changed_count = reverse_edit_log_entries(loadid)
+                cursor.execute(
+                    """UPDATE load_event SET status = %s, load_details = load_details::jsonb || ('{"resources_removed":' || %s || '}')::jsonb WHERE loadid = %s""",
+                    ("unloaded", resources_changed_count, loadid),
+                )
+            except Exception as e:
+                cursor.execute(
+                    """UPDATE load_event SET status = %s WHERE loadid = %s""",
+                    (original_status, loadid),
+                )
+                raise e
 
     @method_decorator(user_created_transaction_match, name="dispatch")
     def reverse(self, request, **kwargs):
