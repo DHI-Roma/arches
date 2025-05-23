@@ -607,7 +607,7 @@ class ImportSingleCsv(BaseImportModule):
                     cursor.execute(
                         """
                         INSERT INTO load_errors (type, value, source, error, message, nodeid, datatype, loadid, nodegroupid)
-                        VALUES (%s,%s,%s,%s,%s,%s,%s,%s)""",
+                        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
                         (
                             "tile",
                             str(list(inst.value.values())[0]["value"]),
