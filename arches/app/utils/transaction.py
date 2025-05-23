@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 
 # Given a transaction ID, reverse (delete or update) tiles and resources created/updated during the transaction
-def reverse_edit_log_entries(transaction_id):
+def reverse_edit_log_entries(transaction_id, user=None, chunk_size=2000):
     revserse_operation_transactionid = str(uuid.uuid4())
 
     transaction_changes = EditLog.objects.filter(transactionid=transaction_id)
@@ -45,10 +45,11 @@ def reverse_edit_log_entries(transaction_id):
     )
 
     for resource in optimize_resource_iteration(
-        created_resources_query_set, chunk_size=2000
+        created_resources_query_set, chunk_size=chunk_size
     ):
         resource.delete(
             fetch_relations=False,
+            user=user,
             transaction_id=revserse_operation_transactionid,
         )
 
@@ -59,11 +60,12 @@ def reverse_edit_log_entries(transaction_id):
 
     for tile in Tile.objects.filter(
         tileid__in=tile_create_changes.values_list("tileinstanceid_uuid", flat=True)
-    ):
+    ).iterator(chunk_size=chunk_size):
         tile.delete(
             recalculate_descriptors=False,
             index=False,
             transaction_id=revserse_operation_transactionid,
+            user=user,
         )
     index_tile_deletion_by_transaction(transaction_id)
 
@@ -75,12 +77,13 @@ def reverse_edit_log_entries(transaction_id):
 
         for tile in Tile.objects.filter(
             tileid__in=tile_edit_changes.values_list("tileinstanceid_uuid", flat=True)
-        ):
+        ).iterator(chunk_size=2000):
             tile.data = tile_edit_changes.get(tileinstanceid=str(tile.tileid)).oldvalue
             tile.save(
                 index=False,
                 recalculate_descriptors=False,
                 transaction_id=revserse_operation_transactionid,
+                user=user,
             )
     if tile_edit_changes.count() > 0:
         index_resources_by_transaction(
