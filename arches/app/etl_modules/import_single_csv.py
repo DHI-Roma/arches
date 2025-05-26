@@ -407,28 +407,41 @@ class ImportSingleCsv(BaseImportModule):
                 for row in reader:
                     if id_label in fieldnames:
                         id_index = fieldnames.index(id_label)
+                        row[id_index] = row[id_index].strip()
                         try:
                             resourceid = uuid.UUID(row[id_index])
                             legacyid = None
                         except (AttributeError, ValueError) as ex:
                             logger.info(f"id was not a valid UUID: {row[id_index]}")
-                            legacyid = row[id_index]
+                            legacyid = row[id_index] if row[id_index] != "" else None
                             try:  # check for pre-existing resource keyed on the legacyid
                                 resource = ResourceInstance.objects.get(
-                                    legacyid=legacyid
+                                    legacyid=legacyid,
+                                    graph_id=graphid,
+                                    legacyid__isnull=False,
                                 )
                                 resourceid = resource.resourceinstanceid
                                 logger.info(
                                     f"pre-existing resource ({resourceid}) found for legacyid {row[id_index]}"
                                 )
                                 # continue
-                            except Exception as e:
+                            except ResourceInstance.DoesNotExist:
                                 logger.info(
                                     "no pre-existing resource found for legacyid ",
                                     legacyid,
                                 )
                                 resourceid = uuid.uuid4()
-                                legacyid = row[id_index]
+                            except ResourceInstance.MultipleObjectsReturned:
+                                pre_existing_resources = (
+                                    ResourceInstance.objects.filter(
+                                        legacyid=legacyid,
+                                        graph_id=graphid,
+                                        legacyid__isnull=False,
+                                    ).values_list("resourceinstanceid", flat=True)
+                                )
+                                msg = f"Multiple matching resources found for legacyid {legacyid}. Operation forbidden. Resourceids: {','.join([str(rid) for rid in pre_existing_resources])}"
+                                logger.error(msg)
+                                raise ValueError(msg)
                     else:
                         resourceid = uuid.uuid4()
                         legacyid = None
