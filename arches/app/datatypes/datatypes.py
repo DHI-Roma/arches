@@ -1424,17 +1424,20 @@ class FileListDataType(BaseDataType):
         source_path = kwargs.get("path")
         for file_path in [filename.strip() for filename in value.split(",")]:
             tile_file = {}
+            tile_file["name"] = os.path.basename(file_path)
             try:
                 file_stats = os.stat(file_path)
                 tile_file["lastModified"] = file_stats.st_mtime
-                tile_file["size"] = file_stats.st_size
             except FileNotFoundError as e:
-                pass
+                file_path = "%s/%s" % (
+                    settings.UPLOADED_FILES_DIR,
+                    str(tile_file["name"]),
+                )
+
+            tile_file["size"] = file_stats.st_size
             tile_file["status"] = "uploaded"
-            tile_file["name"] = os.path.basename(file_path)
             tile_file["type"] = mime.guess_type(file_path)[0]
             tile_file["type"] = "" if tile_file["type"] is None else tile_file["type"]
-            file_path = "%s/%s" % (settings.UPLOADED_FILES_DIR, str(tile_file["name"]))
             tile_file["file_id"] = str(uuid.uuid4())
             if source_path:
                 source_file = os.path.join(source_path, tile_file["name"])
@@ -1454,14 +1457,14 @@ class FileListDataType(BaseDataType):
                         current_file.save()
                         tile_file["size"] = current_file.path.size
                 except FileNotFoundError:
-                    if os.path.exists(source_file):
-                        with open(source_file, "rb") as f:
+                    if os.path.exists(file_path):
+                        with open(file_path, "rb") as f:
                             current_file, created = models.File.objects.get_or_create(
                                 fileid=tile_file["file_id"]
                             )
                             tile_file["size"] = current_file.path.size
                     else:
-                        logger.exception(_("File does not exist"))
+                        logger.exception(_(f"File: {source_file} does not exist"))
 
             else:
                 models.File.objects.get_or_create(
