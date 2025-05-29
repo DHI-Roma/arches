@@ -2248,7 +2248,7 @@ class ResourceInstanceDataType(BaseDataType):
                 relatedResourceItem.get("ontologyProperty", ""),
                 relatedResourceItem.get("inverseOntologyProperty", ""),
             ]:
-                if ontology_property_item != "":
+                if ontology_property_item and ontology_property_item != "":
                     try:
                         uuid.UUID(ontology_property_item)
                         relationship = (
