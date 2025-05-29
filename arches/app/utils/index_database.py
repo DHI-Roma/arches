@@ -643,6 +643,30 @@ def index_resources_by_transaction(
     )
 
 
+def index_custom_indexes_by_transaction(
+    transaction_id,
+    batch_size=settings.BULK_IMPORT_BATCH_SIZE,
+    quiet=False,
+    use_multiprocessing=False,
+    max_subprocesses=0,
+):
+    """
+    Indexes all the custom indexes with a transaction id
+    Keyword Arguments:
+    quiet -- Silences the status bar output during certain operations, use in celery operations for example
+    recalculate_descriptors - forces the primary descriptors to be recalculated before (re)indexing
+    """
+
+    for index in settings.ELASTICSEARCH_CUSTOM_INDEXES:
+        es_index = import_class_from_string(index["module"])(index["name"])
+        es_index.reindex(
+            clear_index=False,
+            batch_size=batch_size,
+            quiet=quiet,
+            transaction_id=transaction_id,
+        )
+
+
 def index_tile_deletion_by_transaction(
     transaction_id,
     batch_size=settings.BULK_IMPORT_BATCH_SIZE,

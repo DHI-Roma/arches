@@ -59,6 +59,7 @@ class Command(BaseCommand):
                 "index_resources_by_transaction",
                 "index_custom_index",
                 "index_custom_indexes",
+                "index_custom_indexes_by_transaction",
                 "add_index",
                 "delete_index",
             ],
@@ -265,6 +266,21 @@ class Command(BaseCommand):
         if options["operation"] == "index_custom_indexes":
             index_database_util.index_custom_indexes(
                 clear_index=options["clear_index"],
+                batch_size=options["batch_size"],
+                quiet=options["quiet"],
+                use_multiprocessing=options["use_multiprocessing"],
+                max_subprocesses=options["max_subprocesses"],
+            )
+
+        if options["operation"] == "index_custom_indexes_by_transaction":
+            try:
+                uuid.UUID(options["transaction"])
+            except ValueError:
+                logger.error(
+                    "A valid transaction id is required. Use -t or --transaction , eg. -t 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx'"
+                )
+            index_database_util.index_custom_indexes_by_transaction(
+                options["transaction"],
                 batch_size=options["batch_size"],
                 quiet=options["quiet"],
                 use_multiprocessing=options["use_multiprocessing"],
