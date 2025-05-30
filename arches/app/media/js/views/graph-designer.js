@@ -176,7 +176,7 @@ var GraphDesignerView = BaseManagerView.extend({
         };
 
         viewModel.exportMappingFile = function() {
-            window.open(arches.urls.export_mapping_file(viewModel.graph.graphid()), '_blank');
+            window.open(arches.urls.export_mapping_file(viewModel.graph.source_identifier_id()), '_blank');
         };
 
         viewModel.shouldShowPublishModal = ko.observable(false);
@@ -506,7 +506,8 @@ var GraphDesignerView = BaseManagerView.extend({
             graph: viewModel.graph,
             appliedFunctions: viewModel.appliedFunctions,
             primaryDescriptorFunction: viewModel.primaryDescriptorFunction,
-            graphModel: viewModel.graphModel
+            graphModel: viewModel.graphModel,
+            pageVm: viewModel,
         });
 
         viewModel.permissionTree = new CardTreeViewModel({
@@ -515,6 +516,7 @@ var GraphDesignerView = BaseManagerView.extend({
             isPermissionTree: true,
             appliedFunctions: viewModel.appliedFunctions,
             primaryDescriptorFunction: viewModel.primaryDescriptorFunction,
+            pageVm: viewModel,
             multiselect: true
         });
 

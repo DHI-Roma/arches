@@ -72,6 +72,7 @@ class GraphManagerViewTests(ArchesTestCase):
             "iconclass": "fa fa-angle-double-down",
             "isresource": False,
             "name": "Node/Node Type",
+            "slug": "node_type",
             "ontology_id": "e6e8db47-2ccf-11e6-927e-b8f6b115d7dd",
             "subtitle": "Represents a node and node type pairing",
             "version": "v1",
@@ -157,6 +158,7 @@ class GraphManagerViewTests(ArchesTestCase):
     def create_test_graph(cls):
         test_graph = Graph.objects.create_graph()
         test_graph.name = "TEST GRAPH"
+        test_graph.slug = "test_graph"
         test_graph.subtitle = "ARCHES TEST GRAPH"
         test_graph.author = "Arches"
         test_graph.description = "ARCHES TEST GRAPH"
@@ -274,6 +276,22 @@ class GraphManagerViewTests(ArchesTestCase):
 
         self.assertEqual(node_.name, "new node name")
         self.assertTrue(node_.is_collector)
+
+    def test_node_reorder(self):
+        self.client.login(username="admin", password="admin")
+        url = reverse("reorder_nodes")
+        reversed_nodes = list(reversed(self.test_graph.nodes.values()))
+        post_data = JSONSerializer().serialize({"nodes": reversed_nodes})
+
+        # Start with an unpublished graph.
+        self.test_graph.publication = None
+        self.test_graph.save()
+        response = self.client.post(url, post_data, "application/json")
+
+        self.assertEqual(
+            [node["sortorder"] for node in response.json()["nodes"]],
+            [0, 1, 2, 3, 4],
+        )
 
     def test_node_delete(self):
         """

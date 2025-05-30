@@ -479,3 +479,14 @@ class AsSqlTests(ArchesTestCase):
         # Apostrophe in "it's" is doubly-escaped so it doesn't close the string
         expected = "jsonb_set('{}'::jsonb, array['en'], '\"it''s a bird\"')"
         self.assertEqual(datatype.i18n_as_sql(domain_value, None, None), expected)
+
+    def test_percent_sign_encoding(self):
+        widget_config = I18n_JSON(
+            {
+                "i18n_properties": ["placeholder"],
+                "placeholder": "Enter text",
+                "width": "100%",
+            }
+        )
+        _, params = widget_config.as_sql(None, None)
+        self.assertEqual(json.loads(params[0])["width"], "100%")

@@ -91,38 +91,14 @@ class TileTests(ArchesTestCase):
         nodegroup.save()
         return TileModel.objects.get(pk=tile.pk)
 
-    def test_tile_repr(self):
+    def test_tile_str(self):
         sample_tile = self.create_tile()
-        self.assertEqual(f"{sample_tile!r}", f"<Statement ({sample_tile.pk})>")
+        self.assertEqual(f"{sample_tile}", f"Statement ({sample_tile.pk})")
 
-    def test_tile_repr_no_nodegroup(self):
+    def test_tile_str_no_nodegroup(self):
         sample_tile = self.create_tile()
         sample_tile.nodegroup = None
-        self.assertEqual(f"{sample_tile!r}", f"<None ({sample_tile.pk})>")
-
-    def test_nodegroup_lookups(self):
-        sample_tile = self.create_tile()
-        query = TileModel.objects.filter(pk=sample_tile.pk).select_related(
-            "nodegroup__grouping_node"
-        )
-        with self.assertNumQueries(1):
-            query[0].nodegroup.grouping_node.alias
-
-        self.assertSequenceEqual(
-            TileModel.objects.filter(nodegroup__grouping_node__alias="Statement").all(),
-            [sample_tile],
-        )
-
-    def test_nodegroup_assignment(self):
-        """Django's ForeignObject is only recently public, so add coverage."""
-        sample_tile = self.create_tile()
-        other_nodegroup = NodeGroup.objects.get(
-            pk="41111111-0000-0000-0000-000000000000"
-        )
-        sample_tile.nodegroup = other_nodegroup
-        sample_tile.save()
-        refreshed = TileModel.objects.get(pk=sample_tile.pk)
-        self.assertEqual(refreshed.nodegroup, other_nodegroup)
+        self.assertEqual(f"{sample_tile}", f"None ({sample_tile.pk})")
 
     def test_load_from_python_dict(self):
         """

@@ -28,6 +28,7 @@ from arches.app.models import models
 from arches.app.models.card import Card
 from arches.app.models.querysets.graph import GraphQuerySet
 from arches.app.models.system_settings import settings
+from arches.app.models.utils import make_name_unique
 from arches.app.datatypes.datatypes import DataTypeFactory
 from arches.app.etl_modules.bulk_data_deletion import BulkDataDeletion
 from arches.app.utils.betterJSONSerializer import JSONSerializer, JSONDeserializer
@@ -35,10 +36,8 @@ from arches.app.search.search_engine_factory import SearchEngineFactory
 from arches.app.utils.i18n import LanguageSynchronizer
 from django.utils.translation import gettext as _
 from pyld.jsonld import compact, JsonLdError
-from django.db.models.base import Deferred
 from django.utils import translation
 from guardian.models import GroupObjectPermission, UserObjectPermission
-
 
 logger = logging.getLogger(__name__)
 
@@ -78,6 +77,7 @@ class Graph(models.GraphModel):
         self.widgets = {}
         self._nodegroups_to_delete = []
         self._functions = []
+        self._spatial_views = []
         self._card_constraints = []
         self._constraints_x_nodes = []
         self.temp_node_name = _("New Node")
@@ -96,6 +96,7 @@ class Graph(models.GraphModel):
                         "user_permissions",
                         "group_permissions",
                         "resource_instance_lifecycle",
+                        "spatial_views",
                     ):
                         setattr(self, key, value)
 
@@ -117,6 +118,11 @@ class Graph(models.GraphModel):
 
                 for card in args[0]["cards"]:
                     self.add_card(card)
+
+                if "spatial_views" in args[0]:
+                    for spatial_view in args[0]["spatial_views"]:
+                        spatial_view = models.SpatialView(**spatial_view)
+                        self.add_spatial_view(spatial_view)
 
                 def check_default_configs(default_configs, configs):
                     if default_configs is not None:
@@ -183,6 +189,7 @@ class Graph(models.GraphModel):
         self.nodes = {}
         self.edges = {}
         self.cards = {}
+        self.widgets = {}
 
         nodes = self.node_set.all()
         edges = self.edge_set.all()
@@ -274,7 +281,7 @@ class Graph(models.GraphModel):
         if self.ontology_id is None:
             node.ontologyclass = None
         if node.pk is None:
-            node.pk = uuid.uuid1()
+            node.pk = uuid.uuid4()
         if isinstance(node.pk, str):
             node.pk = uuid.UUID(node.pk)
         if node.istopnode:
@@ -308,7 +315,7 @@ class Graph(models.GraphModel):
         edge.graph = self
 
         if edge.pk is None:
-            edge.pk = uuid.uuid1()
+            edge.pk = uuid.uuid4()
         if self.ontology is None:
             edge.ontologyproperty = None
         self.edges[edge.pk] = edge
@@ -367,7 +374,7 @@ class Graph(models.GraphModel):
         card.graph = self
 
         if card.pk is None:
-            card.pk = uuid.uuid1()
+            card.pk = uuid.uuid4()
 
         self.cards[card.pk] = card
         self.has_unpublished_changes = True
@@ -392,6 +399,22 @@ class Graph(models.GraphModel):
         self.has_unpublished_changes = True
 
         return function
+
+    def add_spatial_view(self, spatial_view):
+        """
+        Adds a SpatialView to this graph
+
+        Arguments:
+        spatial_view -- an object representing a SpatialView instance or an actual SpatialView instance
+
+        """
+
+        if not isinstance(spatial_view, models.SpatialView):
+            spatial_view = models.SpatialView(**spatial_view.copy())
+
+        self._spatial_views.append(spatial_view)
+        self.has_unpublished_changes = True
+        return spatial_view
 
     def add_resource_instance_lifecycle(self, resource_instance_lifecycle):
         """
@@ -569,6 +592,10 @@ class Graph(models.GraphModel):
                     functionxgraph.save()
                 except:
                     pass
+
+            for spatial_view in self._spatial_views:
+                spatial_view.full_clean(exclude=["language"])
+                spatial_view.save()
 
             # edge case for instantiating a serialized_graph that has a publication
             if self.publication and not len(
@@ -780,7 +807,7 @@ class Graph(models.GraphModel):
                 node.sourcebranchpublication_id = branch_publication_id
 
                 if node.alias and node.alias in aliases:
-                    node.alias = self.make_name_unique(
+                    node.alias = make_name_unique(
                         node.alias, aliases + branch_aliases, "_n"
                     )
 
@@ -796,7 +823,7 @@ class Graph(models.GraphModel):
             sibling_node_names = [
                 node.name for node in self.get_sibling_nodes(branch_copy.root)
             ]
-            branch_copy.root.name = self.make_name_unique(
+            branch_copy.root.name = make_name_unique(
                 branch_copy.root.name, sibling_node_names
             )
             branch_copy.root.description = branch_graph.description
@@ -811,22 +838,6 @@ class Graph(models.GraphModel):
             else:
                 return branch_copy
 
-    def make_name_unique(self, name, names_to_check, suffix_delimiter="_"):
-        """
-        Makes a name unique among a list of names
-
-        Arguments:
-        name -- the name to check and modfiy to make unique in the list of "names_to_check"
-        names_to_check -- a list of names that "name" should be unique among
-        """
-
-        i = 1
-        temp_node_name = name
-        while temp_node_name in names_to_check:
-            temp_node_name = "{0}{1}{2}".format(name, suffix_delimiter, i)
-            i += 1
-        return temp_node_name
-
     def append_node(self, nodeid=None):
         """
         Appends a single node onto this graph
@@ -837,13 +848,13 @@ class Graph(models.GraphModel):
 
         """
         node_names = [node.name for node in self.nodes.values()]
-        temp_node_name = self.make_name_unique(self.temp_node_name, node_names)
+        temp_node_name = make_name_unique(self.temp_node_name, node_names)
         nodeToAppendTo = self.nodes[uuid.UUID(str(nodeid))] if nodeid else self.root
         card = None
         nodegroup = None
 
         if nodeToAppendTo.nodeid == self.root.nodeid and self.isresource is True:
-            newid = uuid.uuid1()
+            newid = uuid.uuid4()
             nodegroup = models.NodeGroup.objects.create(pk=newid)
             card = models.CardModel.objects.create(
                 nodegroup=nodegroup, name=temp_node_name, graph=self
@@ -859,7 +870,7 @@ class Graph(models.GraphModel):
             )
         else:
             newNode = models.Node(
-                nodeid=uuid.uuid1(),
+                nodeid=uuid.uuid4(),
                 name=temp_node_name,
                 istopnode=False,
                 ontologyclass=None,
@@ -1003,7 +1014,7 @@ class Graph(models.GraphModel):
                 node.config["advancedStyle"] = ""
                 node.config["advancedStyling"] = False
 
-        copy_of_self.pk = uuid.uuid1()
+        copy_of_self.pk = uuid.uuid4()
         node_map = {}
         card_map = {}
         for node_id in node_ids:
@@ -1014,7 +1025,7 @@ class Graph(models.GraphModel):
             is_collector = node.is_collector
             if set_source:
                 node.source_identifier_id = node.pk
-            node.pk = uuid.uuid1()
+            node.pk = uuid.uuid4()
             node_map[node_id] = node.pk
 
             if is_collector:
@@ -1028,7 +1039,7 @@ class Graph(models.GraphModel):
                     nodegroup_map[old_nodegroup_id] = node.nodegroup_id
                 for card in copy_of_self.cards.values():
                     if str(card.nodegroup_id) == str(old_nodegroup_id):
-                        new_id = uuid.uuid1()
+                        new_id = uuid.uuid4()
                         if set_source:
                             card.source_identifier_id = card.pk
                         card_map[card.pk] = new_id
@@ -1043,7 +1054,7 @@ class Graph(models.GraphModel):
             if set_source:
                 widget.source_identifier_id = widget.pk
 
-            widget.pk = uuid.uuid1()
+            widget.pk = uuid.uuid4()
             widget.node_id = node_map[widget.node_id]
             widget.card_id = card_map[widget.card_id]
 
@@ -1056,7 +1067,7 @@ class Graph(models.GraphModel):
         for edge_id, edge in copy_of_self.edges.items():
             if set_source:
                 edge.source_identifier_id = edge.pk
-            edge.pk = uuid.uuid1()
+            edge.pk = uuid.uuid4()
             edge.graph = copy_of_self
             copied_domainnode = edge.domainnode
             copied_rangenode = edge.rangenode
@@ -1629,7 +1640,7 @@ class Graph(models.GraphModel):
                         }
                     )
                     user_permission_nodegroup_id_to_nodegroup = {
-                        nodegroup.pk: nodegroup
+                        str(nodegroup.pk): nodegroup
                         for nodegroup in user_permission_nodegroups
                     }
 
@@ -1677,7 +1688,7 @@ class Graph(models.GraphModel):
                         }
                     )
                     group_permission_nodegroup_id_to_nodegroup = {
-                        nodegroup.pk: nodegroup
+                        str(nodegroup.pk): nodegroup
                         for nodegroup in group_permission_nodegroups
                     }
 
@@ -1976,6 +1987,9 @@ class Graph(models.GraphModel):
             else:
                 ret.pop("group_permissions", None)
 
+            ret["spatial_views"] = models.SpatialView.objects.select_related().filter(
+                geometrynode__graph__in=[self.source_identifier_id, self.graphid]
+            )
             ret["domain_connections"] = (
                 self.get_valid_domain_ontology_classes()
                 if "domain_connections" not in exclude
@@ -2057,6 +2071,35 @@ class Graph(models.GraphModel):
                     )
                     raise GraphValidationError(message)
 
+    def _validate_widget_count(self, node):
+        if node.datatype == "semantic":
+            return
+
+        def pk_getter(widget):
+            """get_widgets() might return a dict or a model instance."""
+            try:
+                return widget.pk
+            except AttributeError:
+                return widget["node_id"]
+
+        widgets = self.get_widgets()
+        config_count = len(
+            [widget for widget in widgets if pk_getter(widget) == node.pk]
+        )
+        if config_count > 1:
+            raise GraphValidationError(
+                _("The node '{alias}' has too many widget configurations.").format(
+                    alias=node.alias
+                ),
+                IntegrityCheck.TOO_MANY_WIDGETS.value,
+            )
+        # This not yet an error condition, but it should be in the future.
+        # elif config_count == 0:
+        #     raise GraphValidationError(
+        #         _("The node '{alias}' has no widget configurations.").format(alias=node.alias),
+        #         IntegrityCheck.NO_WIDGETS.value,
+        #     )
+
     def create_node_alias(self, node):
         """
         Assigns a unique, slugified version of a node's name as that node's alias.
@@ -2071,7 +2114,7 @@ class Graph(models.GraphModel):
                 aliases = [
                     n.alias for n in self.nodes.values() if node.alias != n.alias
                 ]
-                node.alias = self.make_name_unique(row[0], aliases, "_n")
+                node.alias = make_name_unique(row[0], aliases, "_n")
                 node.hascustomalias = False
         return node.alias
 
@@ -2146,6 +2189,7 @@ class Graph(models.GraphModel):
 
         for node in self.nodes.values():
             self._validate_node_name(node)
+            self._validate_widget_count(node)
             datatype = datatype_factory.get_instance(node.datatype)
             datatype.validate_node(node)
             if node.exportable is True:
@@ -2251,7 +2295,7 @@ class Graph(models.GraphModel):
                 _("The json-ld context you supplied wasn't formatted correctly."), 1006
             )
 
-        if self.slug is not None:
+        if self.slug:
             graphs_with_matching_slug = (
                 models.GraphModel.objects.exclude(slug__isnull=True)
                 .exclude(source_identifier__isnull=False)
@@ -2270,6 +2314,11 @@ class Graph(models.GraphModel):
                         ).format(slug=self.slug),
                         1007,
                     )
+        else:
+            raise GraphValidationError(
+                _("You must supply a slug for your graph."),
+                IntegrityCheck.GRAPH_MISSING_SLUG.value,
+            )
 
     def update_published_graphs(self, user=None, notes=None):
         """

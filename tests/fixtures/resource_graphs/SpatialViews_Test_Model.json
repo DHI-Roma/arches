@@ -415,7 +415,7 @@
                             "en": "Enter text"
                         },
                         "uneditable": false,
-                        "width": "100%%"
+                        "width": "100%"
                     },
                     "id": "ef14873a-6675-4eb9-80d6-c60ffb4e59e5",
                     "label": {
@@ -1312,7 +1312,7 @@
                 "sortorder": 0,
                 "sourcebranchpublication_id": null
             },
-            "slug": null,
+            "slug": "spatialviews_test",
             "subtitle": {
                 "en": ""
             },

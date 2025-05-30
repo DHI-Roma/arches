@@ -1,6 +1,7 @@
 import datetime
 import json
 import logging
+import pgtrigger
 import sys
 import traceback
 import uuid
@@ -23,7 +24,7 @@ from arches.app.const import ExtensionType
 from arches.app.models.fields.i18n import I18n_TextField, I18n_JSONField
 from arches.app.models.mixins import SaveSupportsBlindOverwriteMixin
 from arches.app.models.query_expressions import UUID4
-from arches.app.models.utils import add_to_update_fields
+from arches.app.models.utils import add_to_update_fields, format_file_into_sql
 from arches.app.utils.betterJSONSerializer import JSONSerializer
 from arches.app.utils.module_importer import get_class_from_modulename
 from arches.app.utils.storage_filename_generator import get_filename
@@ -166,11 +167,27 @@ class CardXNodeXWidget(SaveSupportsBlindOverwriteMixin, models.Model):
             add_to_update_fields(kwargs, "source_identifier_id")
         super(CardXNodeXWidget, self).save(**kwargs)
 
+    def __str__(self):
+        return f"{self.label}"
+
     class Meta:
         managed = True
         db_table = "cards_x_nodes_x_widgets"
-        unique_together = (("node", "card", "widget"),)
         ordering = ["sortorder"]
+        constraints = [
+            # Can't use nulls_distinct=False yet (Postgres 15+ feature)
+            # TODO(Arches 8.2): nulls_distinct=False
+            models.UniqueConstraint(
+                "node",
+                condition=Q(source_identifier__isnull=True),
+                name="unique_node_widget_source",
+            ),
+            models.UniqueConstraint(
+                "node",
+                condition=Q(source_identifier__isnull=False),
+                name="unique_node_widget_draft",
+            ),
+        ]
 
 
 class Concept(SaveSupportsBlindOverwriteMixin, models.Model):
@@ -481,7 +498,7 @@ class GraphModel(SaveSupportsBlindOverwriteMixin, models.Model):
         on_delete=models.SET_DEFAULT,
     )
     config = JSONField(db_column="config", default=dict)
-    slug = models.TextField(validators=[validate_slug], null=True)
+    slug = models.TextField(validators=[validate_slug])
     publication = models.ForeignKey(
         "GraphXPublishedGraph",
         db_column="publicationid",
@@ -704,8 +721,17 @@ class GraphModel(SaveSupportsBlindOverwriteMixin, models.Model):
         db_table = "graphs"
 
         constraints = [
+            # Can't use nulls_distinct=False yet (Postgres 15+ feature)
+            # TODO(Arches 8.2): nulls_distinct=False
             models.UniqueConstraint(
-                fields=["slug", "source_identifier"], name="unique_slug"
+                "slug",
+                condition=Q(source_identifier__isnull=True),
+                name="unique_slug_source",
+            ),
+            models.UniqueConstraint(
+                "slug",
+                condition=Q(source_identifier__isnull=False),
+                name="unique_slug_draft",
             ),
             models.CheckConstraint(
                 condition=(
@@ -879,6 +905,10 @@ class Node(SaveSupportsBlindOverwriteMixin, models.Model):
         null=True,
         on_delete=models.SET_NULL,
     )
+
+    def __str__(self):
+        draft_or_published = "Draft" if self.source_identifier else "Published"
+        return f"{self.alias},{self.pk},{draft_or_published},{str(self.graph)}"
 
     def get_child_nodes_and_edges(self):
         """
@@ -1388,11 +1418,8 @@ class ResourceInstance(SaveSupportsBlindOverwriteMixin, models.Model):
         db_table = "resource_instances"
         permissions = (("no_access_to_resourceinstance", "No Access"),)
 
-    def __repr__(self):
-        return f"<{self.graph.name}: {self.name} ({self.pk})>"
-
     def __str__(self):
-        return repr(self)
+        return f"{self.graph.name}: {self.name} ({self.pk})"
 
     def get_instance_creator_and_edit_permissions(self, user=None):
         creatorid = None
@@ -1702,15 +1729,15 @@ class TileModel(SaveSupportsBlindOverwriteMixin, models.Model):  # Tile
         related_query_name="child",
     )
     data = JSONField(blank=True, default=dict, db_column="tiledata")
-    nodegroup_id = models.UUIDField(db_column="nodegroupid", null=True)
-    nodegroup = models.ForeignObject(
+    nodegroup = models.ForeignKey(
         NodeGroup,
+        db_column="nodegroupid",
+        db_index=False,
+        db_constraint=False,
         null=True,
         on_delete=models.DO_NOTHING,
         related_name="tiles",
         related_query_name="tile",
-        from_fields=["nodegroup_id"],
-        to_fields=["nodegroupid"],
     )
     sortorder = models.IntegerField(blank=True, null=True, default=0)
     provisionaledits = JSONField(blank=True, null=True, db_column="provisionaledits")
@@ -1719,11 +1746,8 @@ class TileModel(SaveSupportsBlindOverwriteMixin, models.Model):  # Tile
         managed = True
         db_table = "tiles"
 
-    def __repr__(self):
-        return f"<{self.find_nodegroup_alias()} ({self.pk})>"
-
     def __str__(self):
-        return repr(self)
+        return f"{self.find_nodegroup_alias()} ({self.pk})"
 
     def find_nodegroup_alias(self):
         if self.nodegroup and self.nodegroup.grouping_node:
@@ -2383,6 +2407,38 @@ class SpatialView(models.Model):
     class Meta:
         managed = True
         db_table = "spatial_views"
+        triggers = [
+            pgtrigger.Composer(
+                name="arches_update_spatial_views",
+                when=pgtrigger.After,
+                operation=pgtrigger.Update | pgtrigger.Delete | pgtrigger.Insert,
+                declare=[
+                    ("sv_perform", "text"),
+                    ("valid_geom_nodeid", "boolean"),
+                    ("has_att_nodes", "integer"),
+                    ("valid_att_nodeids", "boolean"),
+                    ("valid_language_count", "integer"),
+                ],
+                func=pgtrigger.Func(
+                    format_file_into_sql(
+                        "arches_update_spatial_views.sql",
+                        "sql/triggers",
+                    )
+                ),
+            )
+        ]
+
+    def clean_fields(self, exclude=None):
+        super().clean_fields(exclude=exclude)
+        if exclude is not None:
+            if "language" not in exclude:
+                if not PublishedGraph.objects.filter(
+                    language=self.language,
+                    publication__graph_id=self.geometrynode.graph.graphid,
+                ).exists():
+                    raise ValidationError(
+                        "Language must belong to a published graph for the graph of the geometry node"
+                    )
 
     def clean(self):
         """
@@ -2409,15 +2465,6 @@ class SpatialView(models.Model):
         ]:
             raise ValidationError(
                 "One or more attributenodes have a geojson-feature-collection datatype"
-            )
-
-        # language must be be a valid language code belonging to the current publication
-        published_graphs = graph.publication.publishedgraph_set.all()
-        if self.language_id not in [
-            published_graph.language_id for published_graph in published_graphs
-        ]:
-            raise ValidationError(
-                "Language must belong to a published graph for the graph of the geometry node"
             )
 
         # validate the schema is a valid schema in the database

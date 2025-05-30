@@ -321,7 +321,7 @@ class I18n_JSON(NothingNode):
                 ELSE %s
                 END
             """
-            params.append(json.dumps(self.to_localized_object()).replace("%", "%%"))
+            params.append(json.dumps(self.to_localized_object()))
 
         return sql, tuple(params)
 
