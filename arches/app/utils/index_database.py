@@ -659,11 +659,12 @@ def index_custom_indexes_by_transaction(
 
     for index in settings.ELASTICSEARCH_CUSTOM_INDEXES:
         es_index = import_class_from_string(index["module"])(index["name"])
-        es_index.reindex(
-            clear_index=False,
+        es_index.index_resources_by_transaction(
+            transaction_id,
             batch_size=batch_size,
             quiet=quiet,
-            transaction_id=transaction_id,
+            use_multiprocessing=use_multiprocessing,
+            max_subprocesses=max_subprocesses,
         )
 
 
