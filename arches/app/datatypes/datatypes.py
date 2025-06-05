@@ -21,7 +21,6 @@ from django.db.models import fields
 from arches.app.const import ExtensionType
 from arches.app.datatypes.base import BaseDataType
 from arches.app.models import models
-from arches.app.models.resource import Resource
 from arches.app.models.concept import get_preflabel_from_valueid
 from arches.app.models.system_settings import settings
 from arches.app.models.fields.i18n import I18n_JSONField, I18n_String
@@ -2309,6 +2308,7 @@ class ResourceInstanceDataType(BaseDataType):
         #     "searchString": ""
         # }
         from arches.app.search.search_engine_factory import SearchEngineFactory
+        from arches.app.models.resource import Resource
 
         relatable_graphs = kwargs.get("graphs", [])
         default_values_lookup = dict()
