@@ -21,6 +21,7 @@ from django.db.models import fields
 from arches.app.const import ExtensionType
 from arches.app.datatypes.base import BaseDataType
 from arches.app.models import models
+from arches.app.models.resource import Resource
 from arches.app.models.concept import get_preflabel_from_valueid
 from arches.app.models.system_settings import settings
 from arches.app.models.fields.i18n import I18n_JSONField, I18n_String
@@ -2326,8 +2327,12 @@ class ResourceInstanceDataType(BaseDataType):
                 }
 
         def build_resource_instance_object(hit):
+            resourceName = (
+                Resource.objects.get(pk=hit["_id"]).displayname() if hit["_id"] else ""
+            )
             return {
                 "resourceId": hit["_id"],
+                "resourceName": resourceName,
                 "ontologyProperty": (
                     default_values_lookup[hit["_source"]["graph_id"]][
                         "ontologyProperty"
