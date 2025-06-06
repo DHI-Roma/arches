@@ -24,6 +24,7 @@ from arches.app.const import ExtensionType
 from arches.app.models.fields.i18n import I18n_TextField, I18n_JSONField
 from arches.app.models.mixins import SaveSupportsBlindOverwriteMixin
 from arches.app.models.query_expressions import UUID4
+from arches.app.models.querysets.graph import GraphModelQuerySet
 from arches.app.models.utils import add_to_update_fields, format_file_into_sql
 from arches.app.utils.betterJSONSerializer import JSONSerializer
 from arches.app.utils.module_importer import get_class_from_modulename
@@ -471,6 +472,8 @@ class FunctionXGraph(SaveSupportsBlindOverwriteMixin, models.Model):
 
 
 class GraphModel(SaveSupportsBlindOverwriteMixin, models.Model):
+    objects = GraphModelQuerySet.as_manager()
+
     graphid = models.UUIDField(primary_key=True, default=uuid.uuid4, db_default=UUID4())
     name = I18n_TextField(blank=True, null=True)
     description = I18n_TextField(blank=True, null=True)
