@@ -7,7 +7,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ("models", "12002_percent_sign_fix"),
+        ("models", "11955_set_graphs_active"),
     ]
 
     operations = [
