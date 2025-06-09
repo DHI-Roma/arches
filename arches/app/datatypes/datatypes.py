@@ -2089,6 +2089,7 @@ class ResourceInstanceDataType(BaseDataType):
     ):
         errors = []
         if value is not None:
+            from_resourceid = kwargs.get("resourceid", None)
             relations = self.get_nodevalues(value)
             for rel in relations:
                 try:
@@ -2317,6 +2318,7 @@ class ResourceInstanceDataType(BaseDataType):
         from arches.app.models.resource import Resource
 
         relatable_graphs = kwargs.get("graphs", [])
+        from_resourceid = kwargs.get("resourceid", None)
         default_values_lookup = dict()
         for graph in relatable_graphs:
             if graph.get("useOntologyRelationship", False) or not graph.get(
