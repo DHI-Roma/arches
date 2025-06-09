@@ -2158,10 +2158,16 @@ class ResourceInstanceDataType(BaseDataType):
             tile.data[nodeid] = None
 
     def pre_tile_save(self, tile, nodeid):
+        from arches.app.models.resource import Resource
+
         relationships = tile.data[nodeid]
         if relationships:
             for relationship in relationships:
                 relationship["resourceXresourceId"] = str(uuid.uuid4())
+                if relationship.get("resourceName", "") in [None, ""]:
+                    relationship["resourceName"] = Resource.objects.get(
+                        pk=relationship["resourceId"]
+                    ).displayname()
 
     def post_tile_save(self, tile, nodeid, request):
         ret = False
