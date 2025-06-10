@@ -348,6 +348,7 @@ class EditLog(SaveSupportsBlindOverwriteMixin, models.Model):
         indexes = [
             models.Index(fields=["transactionid"]),
             models.Index(fields=["resourceinstanceid"]),
+            models.Index(fields=["timestamp"]),
         ]
 
 
