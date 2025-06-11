@@ -31,8 +31,20 @@ RESOURCE_RELATIONS_INDEX = "resource_relations"
 
 ANALYZER = {
     "analyzer": {
-        "folding": {"tokenizer": "whitespace", "filter": ["lowercase", "asciifolding"]}
-    }
+        "folding": {"tokenizer": "whitespace", "filter": ["lowercase", "asciifolding"]},
+        "ngram_analyzer": {
+            "tokenizer": "ngram_tokenizer",
+            "filter": ["lowercase", "asciifolding"],
+        },
+    },
+    "tokenizer": {
+        "ngram_tokenizer": {
+            "type": "ngram",
+            "min_gram": 3,
+            "max_gram": 15,
+            "token_chars": ["letter", "digit", "punctuation", "symbol"],
+        }
+    },
 }
 
 
@@ -58,6 +70,11 @@ def prepare_terms_index(create=False):
                     "fields": {
                         "raw": {"type": "keyword"},
                         "folded": {"analyzer": "folding", "type": "text"},
+                        "ngram": {
+                            "analyzer": "ngram_analyzer",
+                            "type": "text",
+                            "ignore_above": 512,
+                        },
                     },
                 },
             }
@@ -199,6 +216,11 @@ def prepare_search_index(create=False):
                             "fields": {
                                 "raw": {"type": "keyword", "ignore_above": 256},
                                 "folded": {"type": "text", "analyzer": "folding"},
+                                "ngram": {
+                                    "type": "text",
+                                    "analyzer": "ngram_analyzer",
+                                    "ignore_above": 512,
+                                },
                             },
                         },
                         "nodegroup_id": {"type": "keyword"},

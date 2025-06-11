@@ -2232,6 +2232,8 @@ class ResourceInstanceDataType(BaseDataType):
                     logger.info(f'Resource with id "{resourceid}" not in the system.')
 
     def append_to_document(self, document, nodevalue, nodeid, tile, provisional=False):
+        from arches.app.models.resource import Resource
+
         nodevalue = self.get_nodevalues(nodevalue)
         for relatedResourceItem in nodevalue:
             relationship = None
@@ -2246,6 +2248,17 @@ class ResourceInstanceDataType(BaseDataType):
                 document["strings"].append(
                     {
                         "string": relatedResourceItem["resourceName"],
+                        "nodegroup_id": tile.nodegroup_id,
+                        "nodeid": nodeid,
+                        "provisional": provisional,
+                    }
+                )
+            else:
+                document["strings"].append(
+                    {
+                        "string": Resource.objects.get(
+                            pk=relatedResourceItem["resourceId"]
+                        ).displayname(),
                         "nodegroup_id": tile.nodegroup_id,
                         "nodeid": nodeid,
                         "provisional": provisional,
