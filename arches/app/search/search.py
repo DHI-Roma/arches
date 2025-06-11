@@ -179,8 +179,13 @@ class SearchEngine(object):
 
     def create_index(self, **kwargs):
         kwargs = self._add_prefix(**kwargs)
-        self.es.options(ignore_status=400).indices.create(**kwargs)
+        resp = self.es.options(ignore_status=400).indices.create(**kwargs)
         print("creating index : %s" % kwargs.get("index", ""))
+        if resp.get("error", None):
+            self.logger.error(
+                "%s: WARNING: failed to create index: %s \nException detail: %s\n"
+                % (datetime.now(), kwargs.get("index"), resp["error"])
+            )
 
     def index_data(self, index=None, body=None, idfield=None, id=None, **kwargs):
         """
