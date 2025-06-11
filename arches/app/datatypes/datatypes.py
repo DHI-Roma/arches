@@ -2464,6 +2464,20 @@ class ResourceInstanceDataType(BaseDataType):
                         query.must(match_q)
                     case "!" | "in_list_none":
                         query.must_not(match_q)
+                    case "~":
+                        query.must(
+                            Match(
+                                field=f"tiles.data.{node.pk}.resourceName.ngram",
+                                query=val,
+                            )
+                        )
+                    case "!~":
+                        query.must_not(
+                            Match(
+                                field=f"tiles.data.{node.pk}.resourceName.ngram",
+                                query=val,
+                            )
+                        )
             query.filter(Exists(field=field_name))
 
     def append_search_filters(self, value, node, query, request):
@@ -2564,7 +2578,14 @@ class ResourceInstanceDataType(BaseDataType):
                 },
                 "resourceName": {
                     "type": "text",
-                    "fields": {"keyword": {"ignore_above": 256, "type": "keyword"}},
+                    "fields": {
+                        "keyword": {"ignore_above": 256, "type": "keyword"},
+                        "ngram": {
+                            "type": "text",
+                            "analyzer": "ngram_analyzer",
+                            "ignore_above": 512,
+                        },
+                    },
                 },
                 "ontologyProperty": {
                     "type": "text",
