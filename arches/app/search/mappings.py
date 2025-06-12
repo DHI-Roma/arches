@@ -51,12 +51,6 @@ def prepare_terms_index(create=False):
                     "type": "text",
                     "fields": {
                         "raw": {"type": "keyword"},
-                        "folded": {"analyzer": "folding", "type": "text"},
-                        "ngram": {
-                            "analyzer": "ngram_analyzer",
-                            "type": "text",
-                            "ignore_above": 512,
-                        },
                     },
                 },
             }
