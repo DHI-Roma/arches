@@ -654,7 +654,6 @@ SEARCH_TERM_ANALYZED_FIELDS = [
     #     "ngram": {
     #         "analyzer": "ngram_analyzer",
     #         "type": "text",
-    #         "ignore_above": 512,
     #     }
     # }
 ]
