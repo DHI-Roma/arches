@@ -2580,11 +2580,7 @@ class ResourceInstanceDataType(BaseDataType):
                     "type": "text",
                     "fields": {
                         "keyword": {"ignore_above": 256, "type": "keyword"},
-                        "ngram": {
-                            "type": "text",
-                            "analyzer": "ngram_analyzer",
-                            "ignore_above": 512,
-                        },
+                        "ngram": {"type": "text", "analyzer": "ngram_analyzer"},
                     },
                 },
                 "ontologyProperty": {
