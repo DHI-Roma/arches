@@ -2165,7 +2165,7 @@ class ResourceInstanceDataType(BaseDataType):
         if relationships:
             for relationship in relationships:
                 relationship["resourceXresourceId"] = str(uuid.uuid4())
-                if relationship.get("resourceName", "") in [None, ""]:
+                if not relationship.get("resourceName", ""):
                     relationship["resourceName"] = Resource.objects.get(
                         pk=relationship["resourceId"]
                     ).displayname()
@@ -2244,7 +2244,7 @@ class ResourceInstanceDataType(BaseDataType):
                     "provisional": provisional,
                 }
             )
-            if relatedResourceItem.get("resourceName", "") != "":
+            if relatedResourceItem.get("resourceName", ""):
                 document["strings"].append(
                     {
                         "string": relatedResourceItem["resourceName"],
@@ -2268,7 +2268,7 @@ class ResourceInstanceDataType(BaseDataType):
                 relatedResourceItem.get("ontologyProperty", ""),
                 relatedResourceItem.get("inverseOntologyProperty", ""),
             ]:
-                if ontology_property_item and ontology_property_item != "":
+                if ontology_property_item:
                     try:
                         uuid.UUID(ontology_property_item)
                         relationship = (
@@ -2290,7 +2290,7 @@ class ResourceInstanceDataType(BaseDataType):
         terms = []
         nodevalue = self.get_nodevalues(nodevalue)
         for relatedResourceItem in nodevalue:
-            if relatedResourceItem.get("resourceName", "") != "":
+            if relatedResourceItem.get("resourceName", ""):
                 terms.append(
                     SearchTerm(value=relatedResourceItem["resourceName"], lang="")
                 )
@@ -2298,7 +2298,7 @@ class ResourceInstanceDataType(BaseDataType):
                 relatedResourceItem.get("ontologyProperty", ""),
                 relatedResourceItem.get("inverseOntologyProperty", ""),
             ]:
-                if ontology_property_item != "":
+                if ontology_property_item:
                     try:
                         uuid.UUID(ontology_property_item)
                         relationship = (
