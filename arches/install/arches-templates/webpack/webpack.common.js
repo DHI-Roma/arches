@@ -325,8 +325,8 @@ module.exports = () => {
                         loader: Path.join(PROJECT_RELATIVE_NODE_MODULES_PATH, 'ts-loader'),
                         options: {
                             appendTsSuffixTo: [/\.vue$/],
-                            transpileOnly: true,
-                            configFile: Path.resolve(__dirname, '..', 'tsconfig.json')
+                            configFile: Path.resolve(__dirname, '..', 'tsconfig.json'),
+                            transpileOnly: true
                         }
                     },
                     {
