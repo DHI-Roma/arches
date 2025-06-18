@@ -133,7 +133,8 @@ class BaseImportModule:
                 if source_value
                 else None
             )
-        except:
+        except Exception as e:
+            logger.exception(e)
             value = source_value
         try:
             errors = datatype_instance.validate(value, **config)

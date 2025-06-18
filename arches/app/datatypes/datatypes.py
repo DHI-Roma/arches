@@ -1229,21 +1229,9 @@ class FileListDataType(BaseDataType):
                         )
             if path:
                 if isinstance(value, str):
-                    for file_path in [
-                        filename.strip() for filename in value.split(",")
-                    ]:
-                        if not os.path.exists(
-                            os.path.join(settings.MEDIA_ROOT, file_path)
-                        ):
-                            message = _(
-                                'The file "{0}" does not exist in "{1}{2}"'.format(
-                                    file_path, settings.MEDIA_ROOT, file_path
-                                )
-                            )
-                            title = _("File Not Found")
-                            errors.append(
-                                {"type": "ERROR", "message": message, "title": title}
-                            )
+                    message = _('The value "{0}" is a str'.format(value))
+                    title = _("Malformed datatype nodevalue")
+                    errors.append({"type": "ERROR", "message": message, "title": title})
                 else:
                     for file in value:
                         if file["status"] == "uploaded":
@@ -1442,10 +1430,14 @@ class FileListDataType(BaseDataType):
         tile_data = []
         source_path = kwargs.get("path")
         for file_path in [filename.strip() for filename in value.split(",")]:
+            filename = os.path.basename(file_path)
+            accessible_path = os.path.join(
+                settings.MEDIA_ROOT, settings.UPLOADED_FILES_DIR, filename
+            )
             tile_file = {}
             tile_file["name"] = os.path.basename(file_path)
             try:
-                file_stats = os.stat(file_path)
+                file_stats = os.stat(accessible_path)
                 tile_file["lastModified"] = file_stats.st_mtime
             except FileNotFoundError as e:
                 file_path = "%s/%s" % (
@@ -1485,9 +1477,12 @@ class FileListDataType(BaseDataType):
                     else:
                         logger.exception(_(f"File: {source_file} does not exist"))
 
-            elif os.path.exists(os.path.join(settings.MEDIA_ROOT, file_path)):
+            elif os.path.exists(accessible_path):
                 models.File.objects.get_or_create(
-                    fileid=tile_file["file_id"], path=file_path
+                    fileid=tile_file["file_id"],
+                    path=os.path.join(
+                        settings.UPLOADED_FILES_DIR, os.path.basename(file_path)
+                    ),
                 )
             else:
                 logger.exception(
