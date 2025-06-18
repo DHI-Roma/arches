@@ -1232,10 +1232,12 @@ class FileListDataType(BaseDataType):
                     for file_path in [
                         filename.strip() for filename in value.split(",")
                     ]:
-                        if not os.path.exists(file_path):
+                        if not os.path.exists(
+                            os.path.join(settings.MEDIA_ROOT, file_path)
+                        ):
                             message = _(
-                                'The file "{0}" does not exist in "{1}"'.format(
-                                    file_path, path
+                                'The file "{0}" does not exist in "{1}/{2}"'.format(
+                                    file_path, settings.MEDIA_ROOT, path
                                 )
                             )
                             title = _("File Not Found")
