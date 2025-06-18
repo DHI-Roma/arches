@@ -1236,8 +1236,8 @@ class FileListDataType(BaseDataType):
                             os.path.join(settings.MEDIA_ROOT, file_path)
                         ):
                             message = _(
-                                'The file "{0}" does not exist in "{1}/{2}"'.format(
-                                    file_path, settings.MEDIA_ROOT, path
+                                'The file "{0}" does not exist in "{1}{2}"'.format(
+                                    file_path, settings.MEDIA_ROOT, file_path
                                 )
                             )
                             title = _("File Not Found")
