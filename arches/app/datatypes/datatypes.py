@@ -1228,17 +1228,34 @@ class FileListDataType(BaseDataType):
                             {"type": "ERROR", "message": message, "title": title}
                         )
             if path:
-                for file in value:
-                    if not default_storage.exists(os.path.join(path, file["name"])):
-                        message = _(
-                            'The file "{0}" does not exist in "{1}"'.format(
-                                file["name"], path
+                if isinstance(value, str):
+                    for file_path in [
+                        filename.strip() for filename in value.split(",")
+                    ]:
+                        if not os.path.exists(file_path):
+                            message = _(
+                                'The file "{0}" does not exist in "{1}"'.format(
+                                    file_path, path
+                                )
                             )
-                        )
-                        title = _("File Not Found")
-                        errors.append(
-                            {"type": "ERROR", "message": message, "title": title}
-                        )
+                            title = _("File Not Found")
+                            errors.append(
+                                {"type": "ERROR", "message": message, "title": title}
+                            )
+                else:
+                    for file in value:
+                        if file["status"] == "uploaded":
+                            continue
+                        if not default_storage.exists(os.path.join(path, file["name"])):
+                            message = _(
+                                'The file "{0}" does not exist in local storage "{1}"'.format(
+                                    file["name"], path
+                                )
+                            )
+                            title = _("File Not Found")
+                            errors.append(
+                                {"type": "ERROR", "message": message, "title": title}
+                            )
         except Exception as e:
             dt = self.datatype_model.datatype
             message = _("datatype: {0}, value: {1} - {2} .".format(dt, value, e))
@@ -1439,8 +1456,8 @@ class FileListDataType(BaseDataType):
             tile_file["type"] = mime.guess_type(file_path)[0]
             tile_file["type"] = "" if tile_file["type"] is None else tile_file["type"]
             tile_file["file_id"] = str(uuid.uuid4())
-            if source_path:
-                source_file = os.path.join(source_path, tile_file["name"])
+            source_file = os.path.join(source_path, tile_file["name"])
+            if source_path and default_storage.exists(source_file):
                 fs = default_storage
                 try:
                     with default_storage.open(source_file) as f:
