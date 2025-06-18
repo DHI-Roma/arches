@@ -1483,9 +1483,17 @@ class FileListDataType(BaseDataType):
                     else:
                         logger.exception(_(f"File: {source_file} does not exist"))
 
-            else:
+            elif os.path.exists(os.path.join(settings.MEDIA_ROOT, file_path)):
                 models.File.objects.get_or_create(
                     fileid=tile_file["file_id"], path=file_path
+                )
+            else:
+                logger.exception(
+                    _(
+                        "File: {0} does not exist in the media root: {1}".format(
+                            file_path, settings.MEDIA_ROOT
+                        )
+                    )
                 )
 
             tile_file["url"] = settings.MEDIA_URL + tile_file["file_id"]
