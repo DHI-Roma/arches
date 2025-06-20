@@ -90,14 +90,14 @@ export default AbstractModel.extend({
             read: function() {
                 var configJSON = {};
                 var config = this.get('config');
-                _.each(this.configKeys(), function(key) {
-                    configJSON[key] = koMapping.toJS(config[key]);
+                this.configKeys().forEach(key => {
+                    configJSON[key] = ko.toJS(this.config[key]);
                 });
                 configJSON.label = this.get('label')();
                 return configJSON;
             },
             write: function(value) {
-                if (window.location.pathname.includes(arches.urls.graph_designer(this.card.get('graph_id')))){
+                if (window.location.pathname.includes('graph_designer')) {
                     var config = this.get('config');
                     for (var key in value) {
                         if (key === 'label') {

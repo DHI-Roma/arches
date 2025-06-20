@@ -8,6 +8,32 @@
         <!-- Menu List -->
         <div class="panel-body">
             <ul class="list-group ep-menu-list">
+                <!-- ko ifnot: ko.unwrap($data.graph.source_identifier_id) -->
+                    <!-- Menu Item -->
+                    <li class="edit-menu-item">
+                        <a href="#", data-bind="click: createDraftGraph">
+                            <div class="media-body">
+                                <div class="menu-item-title">
+                                    <i class="fa fa-pencil-square-o"></i>
+                                    <span>{% trans "Draft a Model Update" %}</span>
+                                </div>
+                                <span class="text-muted menu-item-subtitle">{% trans "Create a draft of the current model for full editing capabilities" %}</span>
+                            </div>
+                        </a>
+                    </li>
+                <!-- /ko -->
+                <!-- Menu Item -->
+                <li class="edit-menu-item">
+                    <a href="{% url 'model_history' source_graph_id %}">
+                        <div class="media-body">
+                            <div class="menu-item-title">
+                                <i class="fa fa-calendar"></i>
+                                <span>{% trans "View Model History" %}</span>
+                            </div>
+                            <span class="text-muted menu-item-subtitle">{% trans "Select the Resource Model version from a list of publications" %}</span>
+                        </div>
+                    </a>
+                </li>
                 <!-- Menu Item -->
                 <li class="edit-menu-item">
                     <a href="{% url 'graph' '' %}" data-bind="click: newResource">
@@ -74,18 +100,6 @@
                                 class="text-muted menu-item-subtitle" 
                                 data-bind="text: graph.isresource() ? {% quoted_trans _("Export the existing Resource Model") %} : {% quoted_trans _("Export the existing Branch") %}"
                             ></span>
-                        </div>
-                    </a>
-                </li>
-                <!-- Menu Item -->
-                <li class="edit-menu-item">
-                    <a href="{% url 'model_history' source_graph_id %}">
-                        <div class="media-body">
-                            <div class="menu-item-title">
-                                <i class="fa fa-calendar"></i>
-                                <span>{% trans "View Model History" %}</span>
-                            </div>
-                            <span class="text-muted menu-item-subtitle">{% trans "Select the Resource Model version from a list of publications" %}</span>
                         </div>
                     </a>
                 </li>

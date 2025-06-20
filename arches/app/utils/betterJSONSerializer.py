@@ -13,6 +13,7 @@ from django.core.serializers.python import Deserializer as PythonDeserializer
 from django.core.serializers.json import DjangoJSONEncoder
 from django.contrib.gis.geos import GEOSGeometry
 from django.core.files import File
+from django.utils.functional import Promise
 
 from arches.app.models.fields.i18n import I18n_JSON, I18n_String
 
@@ -112,6 +113,8 @@ class JSONSerializer(object):
                     return self.handle_object(serialize_function(**kwargs), **kwargs)
                 else:
                     return self.handle_model(object, **kwargs)
+            case Promise():
+                return str(object)
             case QuerySet():
                 return [self.handle_object(item, **kwargs) for item in object]
             case bytes():

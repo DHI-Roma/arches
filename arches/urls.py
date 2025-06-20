@@ -549,6 +549,11 @@ urlpatterns = [
         name="graph_is_active_api",
     ),
     re_path(
+        r"^draft_graph/(?P<graph_id>%s)$" % (uuid_regex),
+        api.DraftGraph.as_view(),
+        name="draft_graph_api",
+    ),
+    re_path(
         r"^resources/(?P<graphid>%s)/(?P<resourceid>%s|())$" % (uuid_regex, uuid_regex),
         api.Resources.as_view(),
         name="resources_graphid",

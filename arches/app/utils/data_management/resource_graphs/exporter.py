@@ -148,19 +148,19 @@ def get_graphs_for_export(graphids=None):
         resource_graphs = (
             Graph.objects.all()
             .exclude(pk=settings.SYSTEM_SETTINGS_RESOURCE_MODEL_ID)
-            .exclude(source_identifier__isnull=True)
+            .exclude(source_identifier__isnull=False)
         )
     elif graphids[0] == "resource_models":
         resource_graphs = (
             Graph.objects.filter(isresource=True)
             .exclude(pk=settings.SYSTEM_SETTINGS_RESOURCE_MODEL_ID)
-            .exclude(source_identifier__isnull=True)
+            .exclude(source_identifier__isnull=False)
         )
     elif graphids[0] == "branches":
         resource_graphs = (
             Graph.objects.filter(isresource=False)
             .exclude(pk=settings.SYSTEM_SETTINGS_RESOURCE_MODEL_ID)
-            .exclude(source_identifier__isnull=True)
+            .exclude(source_identifier__isnull=False)
         )
     else:
         try:
@@ -190,7 +190,7 @@ def get_graphs_for_export(graphids=None):
     for resource_graph in resource_graph_query:
         function_ids = []
         for function in resource_graph["functions"]:
-            function_ids.append(function["function_id"])
+            function_ids.append(function)
         resource_graph["functions_x_graphs"] = JSONSerializer().serializeToPython(
             get_function_x_graph_data_for_export(
                 function_ids, resource_graph["graphid"]
@@ -234,7 +234,7 @@ def get_graphs_for_export(graphids=None):
                 JSONSerializer().serialize(
                     ResourceInstanceLifecycle.objects.get(
                         pk=resource_instance_lifecycle_id
-                    )
+                    ).serialize(use_raw_i18n_json=True)
                 )
             )
 

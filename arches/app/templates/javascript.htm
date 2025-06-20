@@ -50,6 +50,26 @@
             "title": "{% trans "Redirected from draft_graph" %}",
             "text": "{% trans "draft_graphs cannot be manually accessed from the graph designer. You have been redirected to the appropriate page." %}"
         }'
+        graph-designer-create-draft-graph-error='{
+            "title": "{% trans "Error Creating Draft Graph" %}",
+            "text": "{% trans "There was an error creating the draft graph. Please try again or contact your system administrator if the problem persists." %}"
+        }'
+        confirm-draft-graph-delete='{
+            "title": "{% trans "Delete Draft?" %}",
+            "text": "{% trans "This will remove the draft and all pending changes. Are you sure you would like to proceed?" %}"
+        }'
+        graph-designer-draft-graph-published='{
+            "title": "{% trans "Graph Published" %}",
+            "text": "{% trans "The changes to the graph have been successfully published." %}"
+        }'
+        graph-designer-published-graph-updated='{
+            "title": "{% trans "Published Graph Updated" %}",
+            "text": "{% trans "The published graph has been successfully updated with the latest changes." %}"
+        }'
+        graph-designer-draft-graph-deleted='{
+            "title": "{% trans "Draft Deleted" %}",
+            "text": "{% trans "The draft has been successfully deleted." %}"
+        }'
         resource-report-redirect-from-resource-editor-not-permissioned='{
             "title": "{% trans "Redirected from the Resource Editor" %}",
             "text": "{% trans "The current user does not have permission to edit this resource. You have been redirected to the appropriate page." %}"
@@ -92,10 +112,6 @@
         confirm-send-two-factor-authentication-email='{
             "title": "{% jsescaped_trans _("Send Two-Factor Authentication email?") %}",
             "text": "{% jsescaped_trans _("This will send an email containing instructions to change two-factor authentication settings to your registered email address.  Are you sure you would like to proceed?") %}"
-        }'
-        resource-graph-has-unpublished-changes='{
-            "title": "{% jsescaped_trans "Graph Has Unpublished Changes" %}",
-            "text": "{% jsescaped_trans "This resource instance is based on a Graph that has unpublished changes. Your system administrator will need to update this instance before you can edit it." %}"
         }'
         resource-graph-has-different-publication='{
             "title": "{% jsescaped_trans "Graph Has Different Published Version" %}",
@@ -1034,6 +1050,7 @@
             {% endfor %}
         }'
         preferred-coordinate-systems="{{ map_info.preferred_coordinate_systems }}"
+        term-search-types="{{ term_search_types }}"
         resources='[{% for resource in resource_graphs %}{
             "maplayerid": "{{resource.graphid}}",
             "graphid": "{{resource.graphid}}",

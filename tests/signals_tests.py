@@ -26,6 +26,7 @@ class GraphHasUnpublishedChangesSignalTests(ArchesTestCase):
             "iconclass": "fa fa-circle",
             "isresource": False,
             "name": "Node",
+            "slug": "node",
             "ontology_id": "e6e8db47-2ccf-11e6-927e-b8f6b115d7dd",
             "subtitle": "Represents a single node in a graph.",
             "version": "v1",
@@ -63,6 +64,7 @@ class GraphHasUnpublishedChangesSignalTests(ArchesTestCase):
             "iconclass": "fa fa-angle-double-down",
             "isresource": False,
             "name": "Node/Node Type",
+            "slug": "node_type",
             "ontology_id": "e6e8db47-2ccf-11e6-927e-b8f6b115d7dd",
             "subtitle": "Represents a node and node type pairing",
             "version": "v1",
@@ -147,23 +149,27 @@ class GraphHasUnpublishedChangesSignalTests(ArchesTestCase):
     @classmethod
     def create_test_graph(cls):
         test_graph = Graph.objects.create_graph()
-        test_graph.name = "TEST GRAPH"
-        test_graph.subtitle = "ARCHES TEST GRAPH"
-        test_graph.author = "Arches"
-        test_graph.description = "ARCHES TEST GRAPH"
-        test_graph.ontology_id = "e6e8db47-2ccf-11e6-927e-b8f6b115d7dd"
-        test_graph.version = "v1.0.0"
-        test_graph.iconclass = "fa fa-building"
-        test_graph.nodegroups = []
-        test_graph.root.ontologyclass = (
+        draft_graph = test_graph.get_draft_graph()
+
+        draft_graph.name = "TEST GRAPH"
+        draft_graph.subtitle = "ARCHES TEST GRAPH"
+        draft_graph.author = "Arches"
+        draft_graph.description = "ARCHES TEST GRAPH"
+        draft_graph.ontology_id = "e6e8db47-2ccf-11e6-927e-b8f6b115d7dd"
+        draft_graph.version = "v1.0.0"
+        draft_graph.iconclass = "fa fa-building"
+        draft_graph.nodegroups = []
+        draft_graph.root.ontologyclass = (
             "http://www.cidoc-crm.org/cidoc-crm/E1_CRM_Entity"
         )
-        test_graph.root.name = "ROOT NODE"
-        test_graph.root.description = "Test Root Node"
-        test_graph.root.datatype = "semantic"
-        test_graph.root.save()
+        draft_graph.root.name = "ROOT NODE"
+        draft_graph.root.description = "Test Root Node"
+        draft_graph.root.datatype = "semantic"
+        draft_graph.root.save()
 
-        test_graph.save()
+        draft_graph.save()
+
+        test_graph.promote_draft_graph_to_active_graph()
         test_graph.publish()
 
         cls.test_graph = test_graph

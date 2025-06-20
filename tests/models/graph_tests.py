@@ -17,14 +17,16 @@ along with this program. If not, see <http://www.gnu.org/licenses/>.
 """
 
 import uuid
+from unittest import mock
 
 from django.contrib.auth.models import User
 from guardian.models import GroupObjectPermission, UserObjectPermission
-from tests.base_test import ArchesTestCase
+
+from arches.app.const import IntegrityCheck
 from arches.app.models import models
 from arches.app.models.graph import Graph, GraphValidationError
-from arches.app.models.card import Card
 from arches.app.utils.betterJSONSerializer import JSONSerializer, JSONDeserializer
+from tests.base_test import ArchesTestCase
 
 # these tests can be run from the command line via
 # python manage.py test tests.models.graph_tests --settings="tests.test_settings"
@@ -36,9 +38,9 @@ class GraphTests(ArchesTestCase):
         super().setUpTestData()
         cls.SINGLE_NODE_GRAPHID = "22000000-0000-0000-0000-000000000000"
         cls.NODE_NODETYPE_GRAPHID = "22000000-0000-0000-0000-000000000001"
-        cls.create_single_node_graph()
-        cls.create_node_node_type_graph()
-        cls.create_test_graph()
+        cls.single_node_graph = cls.create_single_node_graph()
+        cls.node_node_type_graph = cls.create_node_node_type_graph()
+        cls.test_graph = cls.create_test_graph()
 
     @classmethod
     def create_single_node_graph(cls):
@@ -52,6 +54,7 @@ class GraphTests(ArchesTestCase):
             "iconclass": "fa fa-circle",
             "isresource": False,
             "name": "Node",
+            "slug": "node",
             "ontology_id": "e6e8db47-2ccf-11e6-927e-b8f6b115d7dd",
             "subtitle": "Represents a single node in a graph.",
             "version": "v1",
@@ -76,6 +79,7 @@ class GraphTests(ArchesTestCase):
         graph = Graph.objects.get(pk=graph_model.pk)
         graph.save()
         graph.publish()
+        return graph
 
     @classmethod
     def create_node_node_type_graph(cls):
@@ -89,6 +93,7 @@ class GraphTests(ArchesTestCase):
             "iconclass": "fa fa-angle-double-down",
             "isresource": False,
             "name": "Node/Node Type",
+            "slug": "node_node_type",
             "ontology_id": "e6e8db47-2ccf-11e6-927e-b8f6b115d7dd",
             "subtitle": "Represents a node and node type pairing",
             "version": "v1",
@@ -118,7 +123,7 @@ class GraphTests(ArchesTestCase):
             "visible": True,
         }
 
-        models.CardModel.objects.create(**card_data).save()
+        card = models.CardModel.objects.create(**card_data)
         nodes_data = [
             {
                 "config": None,
@@ -148,8 +153,18 @@ class GraphTests(ArchesTestCase):
             },
         ]
 
-        for node in nodes_data:
-            models.Node.objects.create(**node).save()
+        # default_widgets_by_datatype = {
+        #     datatype.pk: datatype.defaultwidget
+        #     for datatype in models.DDataType.objects.select_related("defaultwidget")
+        # }
+        for node_data in nodes_data:
+            node = models.Node.objects.create(**node_data)
+            # This should be uncommented when it will no longer cause failures.
+            # models.CardXNodeXWidget.objects.create(
+            #     card=node.nodegroup.cardmodel_set.all()[0],
+            #     node=node,
+            #     widget=default_widgets_by_datatype[node.datatype],
+            # )
 
         models.NodeGroup.objects.filter(
             pk="20000000-0000-0000-0000-100000000001"
@@ -169,31 +184,36 @@ class GraphTests(ArchesTestCase):
         graph = Graph.objects.get(pk=graph_model.pk)
         graph.save()
         graph.publish()
+        return graph
 
     @classmethod
     def create_test_graph(cls):
         test_graph = Graph.objects.create_graph()
-        test_graph.name = "TEST GRAPH"
-        test_graph.subtitle = "ARCHES TEST GRAPH"
-        test_graph.author = "Arches"
-        test_graph.description = "ARCHES TEST GRAPH"
-        test_graph.ontology_id = "e6e8db47-2ccf-11e6-927e-b8f6b115d7dd"
-        test_graph.version = "v1.0.0"
-        test_graph.iconclass = "fa fa-building"
-        test_graph.nodegroups = []
-        test_graph.root.ontologyclass = (
+        draft_graph = test_graph.get_draft_graph()
+
+        draft_graph.name = "TEST GRAPH"
+        draft_graph.subtitle = "ARCHES TEST GRAPH"
+        draft_graph.author = "Arches"
+        draft_graph.description = "ARCHES TEST GRAPH"
+        draft_graph.ontology_id = "e6e8db47-2ccf-11e6-927e-b8f6b115d7dd"
+        draft_graph.version = "v1.0.0"
+        draft_graph.iconclass = "fa fa-building"
+        draft_graph.nodegroups = []
+        draft_graph.root.ontologyclass = (
             "http://www.cidoc-crm.org/cidoc-crm/E1_CRM_Entity"
         )
-        test_graph.root.name = "ROOT NODE"
-        test_graph.root.description = "Test Root Node"
-        test_graph.root.datatype = "semantic"
-        test_graph.root.save()
+        draft_graph.root.name = "ROOT NODE"
+        draft_graph.root.description = "Test Root Node"
+        draft_graph.root.datatype = "semantic"
+        draft_graph.root.save()
 
-        test_graph.save()
+        draft_graph.save()
+
+        test_graph.promote_draft_graph_to_active_graph()
         test_graph.publish()
 
-        cls.test_graph = test_graph
         cls.rootNode = test_graph.root
+        return test_graph
 
     def test_new_graph(self):
         name = "TEST NEW GRAPH"
@@ -230,6 +250,7 @@ class GraphTests(ArchesTestCase):
 
         graph_obj = {
             "name": "TEST GRAPH",
+            "slug": "test_graph",
             "subtitle": "ARCHES TEST GRAPH",
             "author": "Arches",
             "description": "ARCHES TEST GRAPH",
@@ -339,6 +360,8 @@ class GraphTests(ArchesTestCase):
         """
 
         graph = Graph.objects.create_graph(name="TEST RESOURCE")
+        graph.delete_draft_graph()
+
         graph.append_branch(
             "http://www.cidoc-crm.org/cidoc-crm/P1_is_identified_by",
             graphid=self.NODE_NODETYPE_GRAPHID,
@@ -346,7 +369,38 @@ class GraphTests(ArchesTestCase):
         graph.save()
         graph.publish()
 
+        node_dict = {}
+        for key, value in graph.nodes.items():
+            node_dict[str(key)] = str(value.nodeid)
+
+        graph.add_function_x_graph(
+            {
+                "id": str(uuid.uuid4()),
+                "function_id": str(uuid.uuid4()),
+                "graph_id": graph.graphid,
+                "config": {"test": node_dict},
+            }
+        )
+
         graph_copy = graph.copy()["copy"]
+
+        # confirm that both graphs have the same number of functions_x_graphs
+        self.assertEqual(len(graph.functions_x_graphs), 1)
+        self.assertEqual(len(graph_copy.functions_x_graphs), 1)
+
+        # confirm that the copied graph's functions_x_graphs config is not identical
+        # (nodeids should be different)
+        self.assertNotEqual(
+            graph.functions_x_graphs[0].config, graph_copy.functions_x_graphs[0].config
+        )
+
+        # these checks ensure that the copied functions config's nodeids were replaced
+        # with the mapped ones in the new copied graph.
+        for key in list(graph.nodes.keys()):
+            self.assertIn(str(key), graph.functions_x_graphs[0].config["test"])
+
+        for key in list(graph_copy.nodes.keys()):
+            self.assertIn(str(key), graph_copy.functions_x_graphs[0].config["test"])
 
         self.assertEqual(len(graph_copy.nodes), 3)
         self.assertEqual(len(graph_copy.edges), 2)
@@ -517,6 +571,8 @@ class GraphTests(ArchesTestCase):
 
         # create card collector graph to use for appending on to other graphs
         collector_graph = Graph.objects.create_graph()
+        collector_graph.delete_draft_graph()
+
         collector_graph.append_branch(
             "http://www.ics.forth.gr/isl/CRMdig/L54_is_same-as",
             graphid=self.NODE_NODETYPE_GRAPHID,
@@ -788,26 +844,21 @@ class GraphTests(ArchesTestCase):
         nodegroups_count_before = models.NodeGroup.objects.count()
         card_count_before = models.CardModel.objects.count()
 
-        # test that data is persisited propertly when creating a new graph
+        # test that data is persisted properly when creating a new graph
         graph = Graph.objects.create_graph(is_resource=False)
+        graph.delete_draft_graph()
 
         nodes_count_after = models.Node.objects.count()
         edges_count_after = models.Edge.objects.count()
         nodegroups_count_after = models.NodeGroup.objects.count()
         card_count_after = models.CardModel.objects.count()
 
-        self.assertEqual(
-            nodes_count_after - nodes_count_before, 2
-        )  # one for new graph, one for draft_graph
+        self.assertEqual(nodes_count_after - nodes_count_before, 1)
         self.assertEqual(edges_count_after - edges_count_before, 0)
-        self.assertEqual(
-            nodegroups_count_after - nodegroups_count_before, 2
-        )  # one for new graph, one for draft_graph
-        self.assertEqual(
-            card_count_after - card_count_before, 2
-        )  # one for new graph, one for draft_graph
+        self.assertEqual(nodegroups_count_after - nodegroups_count_before, 1)
+        self.assertEqual(card_count_after - card_count_before, 1)
 
-        # test that data is persisited propertly during an append opertation
+        # test that data is persisted properly during an append opertation
         graph.append_branch(
             "http://www.cidoc-crm.org/cidoc-crm/P1_is_identified_by",
             graphid=self.NODE_NODETYPE_GRAPHID,
@@ -819,10 +870,10 @@ class GraphTests(ArchesTestCase):
         nodegroups_count_after = models.NodeGroup.objects.count()
         card_count_after = models.CardModel.objects.count()
 
-        self.assertEqual(nodes_count_after - nodes_count_before, 4)
+        self.assertEqual(nodes_count_after - nodes_count_before, 3)
         self.assertEqual(edges_count_after - edges_count_before, 2)
-        self.assertEqual(nodegroups_count_after - nodegroups_count_before, 3)
-        self.assertEqual(card_count_after - card_count_before, 3)
+        self.assertEqual(nodegroups_count_after - nodegroups_count_before, 2)
+        self.assertEqual(card_count_after - card_count_before, 2)
 
         # test that removing a node group by setting it to None, removes it from the db
         node_to_update = None
@@ -840,8 +891,8 @@ class GraphTests(ArchesTestCase):
         nodegroups_count_after = models.NodeGroup.objects.count()
         card_count_after = models.CardModel.objects.count()
 
-        self.assertEqual(nodegroups_count_after - nodegroups_count_before, 2)
-        self.assertEqual(card_count_after - card_count_before, 2)
+        self.assertEqual(nodegroups_count_after - nodegroups_count_before, 1)
+        self.assertEqual(card_count_after - card_count_before, 1)
 
         # test that adding back a node group adds it back to the db
         node_to_update["nodegroup_id"] = node_to_update["nodeid"]
@@ -851,8 +902,8 @@ class GraphTests(ArchesTestCase):
         nodegroups_count_after = models.NodeGroup.objects.count()
         card_count_after = models.CardModel.objects.count()
 
-        self.assertEqual(nodegroups_count_after - nodegroups_count_before, 3)
-        self.assertEqual(card_count_after - card_count_before, 3)
+        self.assertEqual(nodegroups_count_after - nodegroups_count_before, 2)
+        self.assertEqual(card_count_after - card_count_before, 2)
 
     def test_delete_graph(self):
         """
@@ -900,6 +951,7 @@ class GraphTests(ArchesTestCase):
             name="TEST",
             is_resource=False,
         )
+        graph.delete_draft_graph()
 
         initial_node_count = models.Node.objects.count()
         initial_edge_count = models.Edge.objects.count()
@@ -991,6 +1043,7 @@ class GraphTests(ArchesTestCase):
             name="TEST",
             is_resource=False,
         )
+        graph.delete_draft_graph()
 
         initial_graph_nodes_count = len(graph.nodes)
         initial_graph_edges_count = len(graph.edges)
@@ -1113,6 +1166,8 @@ class GraphTests(ArchesTestCase):
             name="TEST",
             is_resource=False,
         )
+        graph.delete_draft_graph()
+
         graph.append_branch(
             "http://www.cidoc-crm.org/cidoc-crm/P1_is_identified_by",
             graphid=self.SINGLE_NODE_GRAPHID,
@@ -1143,6 +1198,8 @@ class GraphTests(ArchesTestCase):
             name="TEST",
             is_resource=True,
         )
+        graph.delete_draft_graph()
+
         graph.description = "A test description"
         graph.append_branch(
             "http://www.cidoc-crm.org/cidoc-crm/P1_is_identified_by",
@@ -1214,7 +1271,7 @@ class GraphTests(ArchesTestCase):
 
         graph = self.test_graph
         new_node = graph.add_node(
-            {"nodeid": uuid.uuid1(), "datatype": "semantic"}
+            {"nodeid": uuid.uuid4(), "datatype": "semantic"}
         )  # A blank node with no ontology class is specified
         graph.add_edge(
             {
@@ -1238,7 +1295,7 @@ class GraphTests(ArchesTestCase):
         graph = self.test_graph
         new_node = graph.add_node(
             {
-                "nodeid": uuid.uuid1(),
+                "nodeid": uuid.uuid4(),
                 "datatype": "semantic",
                 "ontologyclass": "InvalidOntologyClass",
             }
@@ -1310,6 +1367,8 @@ class GraphTests(ArchesTestCase):
         """
 
         graph = Graph.objects.create_graph()
+        graph.delete_draft_graph()
+
         graph.name = "TEST GRAPH"
         graph.ontology = None
         graph.save()
@@ -1337,6 +1396,8 @@ class GraphTests(ArchesTestCase):
 
     def test_appending_a_branch_with_an_invalid_ontology_class(self):
         graph = Graph.objects.create_graph()
+        graph.delete_draft_graph()
+
         graph.name = "TEST GRAPH"
         graph.subtitle = "ARCHES TEST GRAPH"
         graph.author = "Arches"
@@ -1362,6 +1423,47 @@ class GraphTests(ArchesTestCase):
 
         with self.assertRaises(GraphValidationError) as cm:
             graph.save()
+
+    def test_graph_validation_of_widget_count(self):
+        # Add missing CardXNodeXWidget instances to the graph
+        # See commented out code in setUpTestData() where this should be done.
+        default_widgets_by_datatype = {
+            datatype.pk: datatype.defaultwidget
+            for datatype in models.DDataType.objects.select_related("defaultwidget")
+        }
+        for node in self.node_node_type_graph.nodes.values():
+            models.CardXNodeXWidget.objects.create(
+                card=node.nodegroup.cardmodel_set.first(),
+                node=node,
+                widget=default_widgets_by_datatype[node.datatype],
+            )
+
+        self.node_node_type_graph.refresh_from_database()
+        self.node_node_type_graph.has_unpublished_changes = True
+        superfluous_widgets = {
+            uid: models.CardXNodeXWidget(node=node)
+            for uid, node in [
+                (uuid.uuid4(), widget.node)
+                for widget in self.node_node_type_graph.widgets.values()
+            ]
+        }
+        self.node_node_type_graph.widgets |= superfluous_widgets
+        self.node_node_type_graph.has_unpublished_changes = True
+
+        with self.assertRaises(GraphValidationError) as cm:
+            self.node_node_type_graph.validate()
+        self.assertEqual(cm.exception.code, IntegrityCheck.TOO_MANY_WIDGETS.value)
+
+    def test_graph_validation_of_slug_changes(self):
+        """
+        Test that changing the slug of a graph raises a validation error for current graph publication.
+        """
+        graph = self.test_graph
+        with self.assertRaises(GraphValidationError) as raised:
+            graph.slug = "new-graph-slug"
+            graph.save()
+        exception = raised.exception
+        self.assertEqual(exception.code, 1018)
 
     def test_add_resource_instance_lifecycle(self):
         resource_instance_lifecycle = {
@@ -1391,6 +1493,7 @@ class GraphTests(ArchesTestCase):
             name="RESOURCE_INSTANCE_LIFECYCLE_TEST_GRAPH",
             is_resource=True,
         )
+        graph.delete_draft_graph()
         graph.add_resource_instance_lifecycle(resource_instance_lifecycle)
         graph.save()
 
@@ -1473,8 +1576,8 @@ class GraphTests(ArchesTestCase):
 
         graph = Graph.objects.get(pk="49a7eea8-2e2b-48e3-8b6e-650f25ec2954")
         admin = User.objects.get(username="admin")
-        graph.create_draft_graph()
         graph.publish(user=admin)
+        graph.create_draft_graph()
 
         draft_graph = Graph.objects.get(slug="test-graph", source_identifier=graph.pk)
         draft_node = draft_graph.node_set.get(name="GeoJSON Node")
@@ -1483,7 +1586,7 @@ class GraphTests(ArchesTestCase):
         draft_graph.refresh_from_database()
 
         graph = Graph.objects.get(slug="test-graph", source_identifier=None)
-        graph.update_from_draft_graph(draft_graph)
+        graph.promote_draft_graph_to_active_graph()
 
         graph_from_db = Graph.objects.get(pk="49a7eea8-2e2b-48e3-8b6e-650f25ec2954")
         self.assertEqual(
@@ -1500,9 +1603,9 @@ class DraftGraphTests(ArchesTestCase):
         super().setUpTestData()
         cls.SINGLE_NODE_GRAPHID = "22000000-0000-0000-0000-000000000000"
         cls.NODE_NODETYPE_GRAPHID = "22000000-0000-0000-0000-000000000001"
-        cls.create_single_node_graph()
-        cls.create_node_node_type_graph()
-        cls.create_test_graph()
+        cls.single_node_graph = cls.create_single_node_graph()
+        cls.node_node_type_graph = cls.create_node_node_type_graph()
+        cls.test_graph = cls.create_test_graph()
 
     @classmethod
     def create_single_node_graph(cls):
@@ -1516,6 +1619,7 @@ class DraftGraphTests(ArchesTestCase):
             "iconclass": "fa fa-circle",
             "isresource": False,
             "name": "Node",
+            "slug": "node",
             "ontology_id": "e6e8db47-2ccf-11e6-927e-b8f6b115d7dd",
             "subtitle": "Represents a single node in a graph.",
             "version": "v1",
@@ -1537,9 +1641,10 @@ class DraftGraphTests(ArchesTestCase):
         }
         models.Node.objects.create(**node_data).save()
 
-        graph = Graph.objects.get(pk=graph_model.pk)
+        graph = Graph.objects.select_related("ontology").get(pk=graph_model.pk)
         graph.save()
         graph.publish()
+        return graph
 
     @classmethod
     def create_node_node_type_graph(cls):
@@ -1553,6 +1658,7 @@ class DraftGraphTests(ArchesTestCase):
             "iconclass": "fa fa-angle-double-down",
             "isresource": False,
             "name": "Node/Node Type",
+            "slug": "node_node_type",
             "ontology_id": "e6e8db47-2ccf-11e6-927e-b8f6b115d7dd",
             "subtitle": "Represents a node and node type pairing",
             "version": "v1",
@@ -1582,7 +1688,7 @@ class DraftGraphTests(ArchesTestCase):
             "visible": True,
         }
 
-        models.CardModel.objects.create(**card_data).save()
+        card = models.CardModel.objects.create(**card_data)
         nodes_data = [
             {
                 "config": None,
@@ -1612,8 +1718,17 @@ class DraftGraphTests(ArchesTestCase):
             },
         ]
 
-        for node in nodes_data:
-            models.Node.objects.create(**node).save()
+        default_widgets_by_datatype = {
+            datatype.pk: datatype.defaultwidget
+            for datatype in models.DDataType.objects.select_related("defaultwidget")
+        }
+        for node_data in nodes_data:
+            node = models.Node.objects.create(**node_data)
+            models.CardXNodeXWidget.objects.create(
+                card=card,
+                node=node,
+                widget=default_widgets_by_datatype[node.datatype],
+            )
 
         models.NodeGroup.objects.filter(
             pk="20000000-0000-0000-0000-100000000001"
@@ -1633,31 +1748,36 @@ class DraftGraphTests(ArchesTestCase):
         graph = Graph.objects.get(pk=graph_model.pk)
         graph.save()
         graph.publish()
+        return graph
 
     @classmethod
     def create_test_graph(cls):
         test_graph = Graph.objects.create_graph()
-        test_graph.name = "TEST GRAPH"
-        test_graph.subtitle = "ARCHES TEST GRAPH"
-        test_graph.author = "Arches"
-        test_graph.description = "ARCHES TEST GRAPH"
-        test_graph.ontology_id = "e6e8db47-2ccf-11e6-927e-b8f6b115d7dd"
-        test_graph.version = "v1.0.0"
-        test_graph.iconclass = "fa fa-building"
-        test_graph.nodegroups = []
-        test_graph.root.ontologyclass = (
+        draft_graph = test_graph.get_draft_graph()
+
+        draft_graph.name = "TEST GRAPH"
+        draft_graph.subtitle = "ARCHES TEST GRAPH"
+        draft_graph.author = "Arches"
+        draft_graph.description = "ARCHES TEST GRAPH"
+        draft_graph.ontology_id = "e6e8db47-2ccf-11e6-927e-b8f6b115d7dd"
+        draft_graph.version = "v1.0.0"
+        draft_graph.iconclass = "fa fa-building"
+        draft_graph.nodegroups = []
+        draft_graph.root.ontologyclass = (
             "http://www.cidoc-crm.org/cidoc-crm/E1_CRM_Entity"
         )
-        test_graph.root.name = "ROOT NODE"
-        test_graph.root.description = "Test Root Node"
-        test_graph.root.datatype = "semantic"
-        test_graph.root.save()
+        draft_graph.root.name = "ROOT NODE"
+        draft_graph.root.description = "Test Root Node"
+        draft_graph.root.datatype = "semantic"
+        draft_graph.root.save()
 
-        test_graph.save()
+        draft_graph.save()
+
+        test_graph.promote_draft_graph_to_active_graph()
         test_graph.publish()
 
-        cls.test_graph = test_graph
         cls.rootNode = test_graph.root
+        return test_graph
 
     def _compare_serialized_updated_source_graph_and_serialized_draft_graph(
         self, serialized_updated_source_graph, serialized_draft_graph
@@ -1853,10 +1973,10 @@ class DraftGraphTests(ArchesTestCase):
             name="TEST RESOURCE",
             is_resource=True,
         )
+        source_graph.delete_draft_graph()
 
         source_graph.name = "TEST NAME"
         source_graph.save()
-        source_graph.refresh_from_database()
 
         self.assertEqual(source_graph.name, "TEST NAME")
         self.assertTrue(source_graph.has_unpublished_changes)
@@ -1864,7 +1984,7 @@ class DraftGraphTests(ArchesTestCase):
         source_graph.publish()
         self.assertFalse(source_graph.has_unpublished_changes)
 
-        draft_graph = Graph.objects.get(source_identifier=source_graph)
+        draft_graph = source_graph.create_draft_graph()
         self.assertFalse(draft_graph.has_unpublished_changes)
 
     def test_create_draft_graph_sets_correct_has_unpublished_changes_value(self):
@@ -1872,13 +1992,9 @@ class DraftGraphTests(ArchesTestCase):
             name="TEST RESOURCE",
             is_resource=True,
         )
-
         self.assertFalse(source_graph.has_unpublished_changes)
 
-        source_graph.create_draft_graph()
-        self.assertFalse(source_graph.has_unpublished_changes)
-
-        draft_graph = Graph.objects.get(source_identifier=source_graph)
+        draft_graph = source_graph.get_draft_graph()
         self.assertFalse(draft_graph.has_unpublished_changes)
 
     def test_restore_state_from_serialized_graph(self):
@@ -1886,6 +2002,7 @@ class DraftGraphTests(ArchesTestCase):
             name="TEST RESOURCE",
             is_resource=True,
         )
+        source_graph.delete_draft_graph()
 
         source_graph.name = "TEST NAME"
         source_graph.save()
@@ -1899,35 +2016,165 @@ class DraftGraphTests(ArchesTestCase):
             language="en",
         )
 
-        source_graph = source_graph.restore_state_from_serialized_graph(
+        restored_source_graph = source_graph.restore_state_from_serialized_graph(
             published_graph.serialized_graph
         )
 
-        self.assertFalse(source_graph.has_unpublished_changes)
-        self.assertEqual(source_graph.name, "TEST RESOURCE")
+        self.assertFalse(restored_source_graph.has_unpublished_changes)
+        self.assertEqual(restored_source_graph.name, "TEST RESOURCE")
+
+    def test_bulk_data_manager_records_preserved_on_state_restoration(self):
+        source_graph = Graph.objects.create_graph(
+            name="TEST RESOURCE",
+            is_resource=True,
+        )
+        draft_graph = source_graph.get_draft_graph()
+        admin = User.objects.get(username="admin")
+
+        result = draft_graph.append_node()
+        result["node"].datatype = "number"
+        draft_graph.save()
+        updated_source_graph = source_graph.promote_draft_graph_to_active_graph()
+        updated_source_graph.publish(user=admin)
+
+        # Record bulk data manager history.
+        nodegroup = models.NodeGroup.objects.get(
+            node__graph=source_graph, node__datatype="number"
+        )
+        event = models.LoadEvent.objects.create(
+            etl_module=models.ETLModule.objects.first(), user=admin
+        )
+        load_errors = models.LoadErrors.objects.create(
+            load_event=event, nodegroup=nodegroup, node=result["node"]
+        )
+        load_staging = models.LoadStaging.objects.create(
+            load_event=event, nodegroup=nodegroup
+        )
+
+        published_graph = models.PublishedGraph.objects.get(
+            publication=updated_source_graph.publication,
+            language="en",
+        )
+
+        updated_source_graph.restore_state_from_serialized_graph(
+            published_graph.serialized_graph
+        )
+
+        # The bulk data manager history still exists.
+        load_errors.refresh_from_db()
+        self.assertEqual(load_errors.nodegroup, nodegroup)
+        self.assertEqual(load_errors.node, result["node"])
+        load_staging.refresh_from_db()
+        self.assertEqual(load_staging.nodegroup, nodegroup)
+
+    @mock.patch("arches.app.search.search.SearchEngine.create_mapping")
+    def test_saving_draft_graph_does_not_create_es_mapping(self, mocked_create_mapping):
+        source_graph = Graph.objects.create_graph(
+            name="TEST RESOURCE",
+            is_resource=True,
+        )
+        draft_graph = source_graph.get_draft_graph()
+
+        result = draft_graph.append_node()
+        result["node"].datatype = "string"
+        draft_graph.save()
+
+        updated_source_graph = source_graph.promote_draft_graph_to_active_graph()
+
+        mocked_create_mapping.assert_called_once()
+
+        draft_graph = updated_source_graph.create_draft_graph()
+        draft_graph.save()
+
+        mocked_create_mapping.assert_called_once()
+
+    def test_node_configs_updated(self):
+        """
+        test to ensure node configs are updated when a draft graph is created
+
+        """
+        models.GraphModel.objects.create(
+            **{
+                "name": "Test Graph",
+                "graphid": "49a7eea8-2e2b-48e3-8b6e-650f25ec2954",
+                "isresource": True,
+                "slug": "test-graph",
+            }
+        )
+
+        models.NodeGroup.objects.create(pk="88677159-dccf-4629-9210-f6a2a7463552")
+
+        models.Node.objects.create(
+            **{
+                "name": "Top Node",
+                "graph_id": "49a7eea8-2e2b-48e3-8b6e-650f25ec2954",
+                "datatype": "semantic",
+                "istopnode": True,
+                "nodeid": "c1257d42-9275-40df-835e-5b99eee818fa",
+            }
+        )
+
+        models.Node.objects.create(
+            **{
+                "name": "Semantic Node",
+                "graph_id": "49a7eea8-2e2b-48e3-8b6e-650f25ec2954",
+                "datatype": "semantic",
+                "istopnode": False,
+                "config": {
+                    "i18n_properties": ["placeholder"],
+                    "placeholder": {
+                        "en": "Test Node",
+                        "es": "Nodo de prueba",
+                    },
+                    "nodeid": "c1257d42-9275-40df-835e-5b99eee818fa",
+                },
+                "nodeid": "88677159-dccf-4629-9210-f6a2a7463552",
+                "nodegroup_id": "88677159-dccf-4629-9210-f6a2a7463552",
+            }
+        )
+        models.GraphModel.objects.filter(
+            pk="49a7eea8-2e2b-48e3-8b6e-650f25ec2954"
+        ).update(has_unpublished_changes=False)
+
+        graph = Graph.objects.get(pk="49a7eea8-2e2b-48e3-8b6e-650f25ec2954")
+
+        draft_graph = graph.create_draft_graph()
+        original_semantic_node = graph.node_set.get(name="Semantic Node")
+        draft_node = draft_graph.node_set.get(name="Semantic Node")
+        draft_top_node = draft_graph.node_set.get(name="Top Node")
+
+        # config for node ids should be different between draft and original
+        self.assertNotEqual(
+            original_semantic_node.config["nodeid"], draft_node.config["nodeid"]
+        )
+        # node configs should be updated per the new node mapping
+        self.assertEqual(draft_node.config["nodeid"], str(draft_top_node.nodeid))
+
+        # ensure we don't mangle the i18n_json field when mutating
+        self.assertEqual(draft_node.config["placeholder"]["es"], "Nodo de prueba")
 
     def test_update_empty_graph_from_draft_graph(self):
         source_graph = Graph.objects.create_graph(
             name="TEST RESOURCE",
             is_resource=True,
         )
-        draft_graph = Graph.objects.get(source_identifier=source_graph)
+        draft_graph = source_graph.get_draft_graph()
 
         draft_graph.append_branch(
             "http://www.cidoc-crm.org/cidoc-crm/P1_is_identified_by",
             graphid=self.NODE_NODETYPE_GRAPHID,
         )
         draft_graph.save()
+        draft_graph.refresh_from_database()
         self.assertTrue(draft_graph.has_unpublished_changes)
-
-        updated_source_graph = source_graph.update_from_draft_graph(
-            draft_graph=draft_graph
-        )
-        self.assertFalse(updated_source_graph.has_unpublished_changes)
 
         serialized_draft_graph = JSONDeserializer().deserialize(
             JSONSerializer().serialize(draft_graph)
         )
+
+        updated_source_graph = source_graph.promote_draft_graph_to_active_graph()
+        self.assertFalse(updated_source_graph.has_unpublished_changes)
+
         serialized_updated_source_graph = JSONDeserializer().deserialize(
             JSONSerializer().serialize(updated_source_graph)
         )
@@ -1941,7 +2188,7 @@ class DraftGraphTests(ArchesTestCase):
             name="TEST RESOURCE",
             is_resource=True,
         )
-        draft_graph = Graph.objects.get(source_identifier=source_graph)
+        draft_graph = source_graph.get_draft_graph()
 
         draft_graph.append_branch(
             "http://www.cidoc-crm.org/cidoc-crm/P1_is_identified_by",
@@ -1949,9 +2196,8 @@ class DraftGraphTests(ArchesTestCase):
         )
         draft_graph.save()
 
-        updated_source_graph = source_graph.update_from_draft_graph(
-            draft_graph=draft_graph
-        )
+        updated_source_graph = source_graph.promote_draft_graph_to_active_graph()
+        draft_graph = updated_source_graph.create_draft_graph()
 
         for node in list(draft_graph.nodes.values()):
             if node.name == "Node Type":
@@ -1966,10 +2212,10 @@ class DraftGraphTests(ArchesTestCase):
         )
         draft_graph.save()
 
-        updated_source_graph = updated_source_graph.update_from_draft_graph(
-            draft_graph=draft_graph
+        updated_source_graph = (
+            updated_source_graph.promote_draft_graph_to_active_graph()
         )
-        draft_graph = Graph.objects.get(source_identifier=updated_source_graph)
+        draft_graph = updated_source_graph.create_draft_graph()
 
         serialized_updated_draft_graph = JSONDeserializer().deserialize(
             JSONSerializer().serialize(draft_graph)
@@ -1987,17 +2233,21 @@ class DraftGraphTests(ArchesTestCase):
             name="TEST RESOURCE",
             is_resource=True,
         )
-        draft_graph = Graph.objects.get(source_identifier=source_graph)
+        draft_graph = source_graph.get_draft_graph()
 
         draft_graph.append_branch(
             "http://www.cidoc-crm.org/cidoc-crm/P1_is_identified_by",
             graphid=self.NODE_NODETYPE_GRAPHID,
         )
         draft_graph.save()
+        updated_source_graph = source_graph.promote_draft_graph_to_active_graph()
 
-        updated_source_graph = source_graph.update_from_draft_graph(
-            draft_graph=draft_graph
+        serialized_updated_source_graph = JSONDeserializer().deserialize(
+            JSONSerializer().serialize(updated_source_graph)
         )
+
+        self.assertTrue(len(serialized_updated_source_graph["user_permissions"]) == 0)
+        self.assertTrue(len(serialized_updated_source_graph["group_permissions"]) == 0)
 
         nodegroup = updated_source_graph.get_nodegroups()[:1][0]
 
@@ -2007,34 +2257,42 @@ class DraftGraphTests(ArchesTestCase):
         UserObjectPermission.objects.create(
             user_id=2, content_object=nodegroup, permission_id=94
         )
+
         # calling `*.objects.create()` does not set dirty flag
         updated_source_graph.has_unpublished_changes = True
 
-        serialized_draft_graph = JSONDeserializer().deserialize(
-            JSONSerializer().serialize(draft_graph)
-        )
         serialized_updated_source_graph = JSONDeserializer().deserialize(
             JSONSerializer().serialize(updated_source_graph)
         )
 
-        self._compare_serialized_updated_source_graph_and_serialized_draft_graph(
-            serialized_updated_source_graph, serialized_draft_graph
+        updated_source_graph.publish()
+        published_graph = models.PublishedGraph.objects.get(
+            publication=updated_source_graph.publication,
+            language="en",
         )
+        serialized_published_graph = JSONDeserializer().deserialize(
+            JSONSerializer().serialize(published_graph.serialized_graph)
+        )
+
+        self._compare_serialized_updated_source_graph_and_serialized_draft_graph(
+            serialized_updated_source_graph, serialized_published_graph
+        )
+
+        self.assertTrue(len(serialized_updated_source_graph["user_permissions"]) > 0)
+        self.assertTrue(len(serialized_updated_source_graph["group_permissions"]) > 0)
 
     def test_update_graph_with_relatable_resources(self):
         source_graph = Graph.objects.create_graph(
             name="TEST RESOURCE",
             is_resource=True,
         )
-        draft_graph = source_graph.create_draft_graph()
+        draft_graph = source_graph.get_draft_graph()
 
         draft_graph.root.set_relatable_resources([source_graph.root.pk])
         draft_graph.root.save()
         draft_graph.save()
 
-        updated_source_graph = source_graph.update_from_draft_graph(
-            draft_graph=draft_graph
-        )
+        updated_source_graph = source_graph.promote_draft_graph_to_active_graph()
         draft_graph = updated_source_graph.create_draft_graph()
 
         self.assertTrue(len(updated_source_graph.root.get_relatable_resources()))
@@ -2055,17 +2313,15 @@ class DraftGraphTests(ArchesTestCase):
             name="TEST RESOURCE",
             is_resource=True,
         )
-        draft_graph = source_graph.create_draft_graph()
+        draft_graph = source_graph.get_draft_graph()
 
         draft_graph.append_branch(
             "http://www.cidoc-crm.org/cidoc-crm/P1_is_identified_by",
             graphid=self.NODE_NODETYPE_GRAPHID,
         )
         draft_graph.save()
-
-        updated_source_graph = source_graph.update_from_draft_graph(
-            draft_graph=draft_graph
-        )
+        updated_source_graph = source_graph.promote_draft_graph_to_active_graph()
+        draft_graph = updated_source_graph.create_draft_graph()
 
         nodegroup_count_before = models.NodeGroup.objects.count()
         node_count_before = models.Node.objects.count()
@@ -2073,6 +2329,7 @@ class DraftGraphTests(ArchesTestCase):
         card_count_before = models.CardModel.objects.count()
         card_x_node_x_widget_count_before = models.CardXNodeXWidget.objects.count()
 
+        updated_source_graph.delete_draft_graph()
         updated_source_graph.create_draft_graph()
 
         nodegroup_count_after = models.NodeGroup.objects.count()
@@ -2105,16 +2362,14 @@ class DraftGraphTests(ArchesTestCase):
             name="TEST RESOURCE",
             is_resource=True,
         )
-        draft_graph = source_graph.create_draft_graph()
+        draft_graph = source_graph.get_draft_graph()
 
         draft_graph.append_branch(
             "http://www.cidoc-crm.org/cidoc-crm/P1_is_identified_by",
             graphid=self.NODE_NODETYPE_GRAPHID,
         )
         draft_graph.save()
-        updated_source_graph = source_graph.update_from_draft_graph(
-            draft_graph=draft_graph
-        )
+        updated_source_graph = source_graph.promote_draft_graph_to_active_graph()
 
         updated_source_graph.delete()
 
@@ -2145,33 +2400,31 @@ class DraftGraphTests(ArchesTestCase):
             is_resource=True,
         )
 
-        draft_graph = source_graph.create_draft_graph()
-
         nodegroup_count_before = models.NodeGroup.objects.count()
         node_count_before = models.Node.objects.count()
         edge_count_before = models.Edge.objects.count()
         card_count_before = models.CardModel.objects.count()
         card_x_node_x_widget_count_before = models.CardXNodeXWidget.objects.count()
 
+        draft_graph = source_graph.get_draft_graph()
         draft_graph.append_branch(
             "http://www.cidoc-crm.org/cidoc-crm/P1_is_identified_by",
             graphid=self.NODE_NODETYPE_GRAPHID,
         )
         draft_graph.save()
 
-        source_graph.create_draft_graph()
+        source_graph.delete_draft_graph()
+        reverted_draft_graph = source_graph.create_draft_graph()
 
-        draft_graph = models.Graph.objects.get(source_identifier_id=source_graph.pk)
-
-        serialized_draft_graph = JSONDeserializer().deserialize(
-            JSONSerializer().serialize(draft_graph)
+        serialized_reverted_draft_graph = JSONDeserializer().deserialize(
+            JSONSerializer().serialize(reverted_draft_graph)
         )
-        serialized_updated_source_graph = JSONDeserializer().deserialize(
+        serialized_source_graph = JSONDeserializer().deserialize(
             JSONSerializer().serialize(source_graph)
         )
 
         self._compare_serialized_updated_source_graph_and_serialized_draft_graph(
-            serialized_updated_source_graph, serialized_draft_graph
+            serialized_source_graph, serialized_reverted_draft_graph
         )
 
         nodegroup_count_after = models.NodeGroup.objects.count()
@@ -2193,7 +2446,7 @@ class DraftGraphTests(ArchesTestCase):
             name="TEST RESOURCE",
             is_resource=True,
         )
-        draft_graph = source_graph.create_draft_graph()
+        draft_graph = source_graph.get_draft_graph()
 
         draft_graph.append_branch(
             "http://www.cidoc-crm.org/cidoc-crm/P1_is_identified_by",
@@ -2201,9 +2454,7 @@ class DraftGraphTests(ArchesTestCase):
         )
         draft_graph.save()
 
-        updated_source_graph = source_graph.update_from_draft_graph(
-            draft_graph=draft_graph
-        )
+        updated_source_graph = source_graph.promote_draft_graph_to_active_graph()
         draft_graph = updated_source_graph.create_draft_graph()
 
         nodegroup_count_before = models.NodeGroup.objects.count()
@@ -2216,8 +2467,8 @@ class DraftGraphTests(ArchesTestCase):
         nodegroup.cardinality = "1"
         nodegroup.save()
 
-        updated_source_graph = updated_source_graph.update_from_draft_graph(
-            draft_graph=draft_graph
+        updated_source_graph = (
+            updated_source_graph.promote_draft_graph_to_active_graph()
         )
         draft_graph = updated_source_graph.create_draft_graph()
 
@@ -2254,7 +2505,7 @@ class DraftGraphTests(ArchesTestCase):
             name="TEST RESOURCE",
             is_resource=True,
         )
-        draft_graph = source_graph.create_draft_graph()
+        draft_graph = source_graph.get_draft_graph()
 
         draft_graph.append_branch(
             "http://www.cidoc-crm.org/cidoc-crm/P1_is_identified_by",
@@ -2262,9 +2513,7 @@ class DraftGraphTests(ArchesTestCase):
         )
         draft_graph.save()
 
-        updated_source_graph = source_graph.update_from_draft_graph(
-            draft_graph=draft_graph
-        )
+        updated_source_graph = source_graph.promote_draft_graph_to_active_graph()
         draft_graph = updated_source_graph.create_draft_graph()
 
         nodegroup_count_before = models.NodeGroup.objects.count()
@@ -2274,9 +2523,10 @@ class DraftGraphTests(ArchesTestCase):
         card_x_node_x_widget_count_before = models.CardXNodeXWidget.objects.count()
 
         draft_graph.root.name = "UPDATED_NODE_NAME"
+        draft_graph.save()
 
-        updated_source_graph = updated_source_graph.update_from_draft_graph(
-            draft_graph=draft_graph
+        updated_source_graph = (
+            updated_source_graph.promote_draft_graph_to_active_graph()
         )
         draft_graph = updated_source_graph.create_draft_graph()
 
@@ -2312,7 +2562,7 @@ class DraftGraphTests(ArchesTestCase):
             name="TEST RESOURCE",
             is_resource=True,
         )
-        draft_graph = source_graph.create_draft_graph()
+        draft_graph = source_graph.get_draft_graph()
 
         draft_graph.append_branch(
             "http://www.cidoc-crm.org/cidoc-crm/P1_is_identified_by",
@@ -2320,9 +2570,7 @@ class DraftGraphTests(ArchesTestCase):
         )
         draft_graph.save()
 
-        updated_source_graph = source_graph.update_from_draft_graph(
-            draft_graph=draft_graph
-        )
+        updated_source_graph = source_graph.promote_draft_graph_to_active_graph()
         draft_graph = updated_source_graph.create_draft_graph()
 
         nodegroup_count_before = models.NodeGroup.objects.count()
@@ -2331,12 +2579,12 @@ class DraftGraphTests(ArchesTestCase):
         card_count_before = models.CardModel.objects.count()
         card_x_node_x_widget_count_before = models.CardXNodeXWidget.objects.count()
 
-        card = [card for card in draft_graph.cards.values()][0]
-        card.description = "UPDATED_CARD_DESCRIPTION"
-        card.save()
+        original_card = [card for card in draft_graph.cards.values()][0]
+        original_card.description = "UPDATED_CARD_DESCRIPTION"
+        original_card.save()
 
-        updated_source_graph = updated_source_graph.update_from_draft_graph(
-            draft_graph=draft_graph
+        updated_source_graph = (
+            updated_source_graph.promote_draft_graph_to_active_graph()
         )
         draft_graph = updated_source_graph.create_draft_graph()
 
@@ -2351,7 +2599,11 @@ class DraftGraphTests(ArchesTestCase):
             serialized_updated_source_graph, serialized_draft_graph
         )
 
-        updated_card = [card for card in updated_source_graph.cards.values()][0]
+        updated_card = [
+            card
+            for card in updated_source_graph.cards.values()
+            if card.pk == original_card.source_identifier_id
+        ][0]
         self.assertEqual(
             updated_card.description.value, '{"en": "UPDATED_CARD_DESCRIPTION"}'
         )
@@ -2375,7 +2627,7 @@ class DraftGraphTests(ArchesTestCase):
             name="TEST RESOURCE",
             is_resource=True,
         )
-        draft_graph = source_graph.create_draft_graph()
+        draft_graph = source_graph.get_draft_graph()
 
         draft_graph.append_branch(
             "http://www.cidoc-crm.org/cidoc-crm/P1_is_identified_by",
@@ -2383,25 +2635,33 @@ class DraftGraphTests(ArchesTestCase):
         )
         draft_graph.save()
 
-        updated_source_graph = source_graph.update_from_draft_graph(
-            draft_graph=draft_graph
-        )
+        updated_source_graph = source_graph.promote_draft_graph_to_active_graph()
         draft_graph = updated_source_graph.create_draft_graph()
 
         card = [card for card in draft_graph.cards.values()][0]
-        card_x_node_x_widget = models.CardXNodeXWidget.objects.create(
+
+        old_draft_widget = (
+            card.cardxnodexwidget_set.filter(
+                node_id=card.nodegroup_id, source_identifier__isnull=False
+            )
+            .get()
+            .source_identifier
+        )
+        draft_graph.widgets.pop(old_draft_widget.pk)
+        old_draft_widget.delete()
+
+        new_draft_widget = models.CardXNodeXWidget.objects.create(
             card=card,
             node_id=card.nodegroup_id,
             widget=models.Widget.objects.first(),
             label="Widget name",
         )
 
-        draft_graph.widgets[card_x_node_x_widget.pk] = card_x_node_x_widget
-
+        draft_graph.widgets[new_draft_widget.pk] = new_draft_widget
         draft_graph.save()
 
-        updated_source_graph = updated_source_graph.update_from_draft_graph(
-            draft_graph=draft_graph
+        updated_source_graph = (
+            updated_source_graph.promote_draft_graph_to_active_graph()
         )
         draft_graph = updated_source_graph.create_draft_graph()
 
@@ -2411,12 +2671,16 @@ class DraftGraphTests(ArchesTestCase):
         card_count_before = models.CardModel.objects.count()
         card_x_node_x_widget_count_before = models.CardXNodeXWidget.objects.count()
 
-        widget = [widget for widget in draft_graph.widgets.values()][0]
-        widget.label = "UPDATED_WIDGET_NAME"
-        widget.save()
+        updated_widget = [
+            widget
+            for widget in draft_graph.widgets.values()
+            if widget.source_identifier_id == new_draft_widget.pk
+        ][0]
+        updated_widget.label = "UPDATED_WIDGET_NAME"
+        updated_widget.save()
 
-        updated_source_graph = updated_source_graph.update_from_draft_graph(
-            draft_graph=draft_graph
+        updated_source_graph = (
+            updated_source_graph.promote_draft_graph_to_active_graph()
         )
         draft_graph = updated_source_graph.create_draft_graph()
 
@@ -2431,8 +2695,12 @@ class DraftGraphTests(ArchesTestCase):
             serialized_updated_source_graph, serialized_draft_graph
         )
 
-        updated_widget = [widget for widget in draft_graph.widgets.values()][0]
-        self.assertEqual(updated_widget.label.value, '{"en": "UPDATED_WIDGET_NAME"}')
+        re_updated_widget = [
+            widget
+            for widget in draft_graph.widgets.values()
+            if widget.source_identifier_id == updated_widget.source_identifier_id
+        ][0]
+        self.assertEqual(re_updated_widget.label.value, '{"en": "UPDATED_WIDGET_NAME"}')
 
         nodegroup_count_after = models.NodeGroup.objects.count()
         node_count_after = models.Node.objects.count()
@@ -2448,12 +2716,11 @@ class DraftGraphTests(ArchesTestCase):
             card_x_node_x_widget_count_before, card_x_node_x_widget_count_after
         )
 
-    def test_update_from_draft_graph_does_not_affect_resources(self):
+    def test_promote_draft_graph_to_active_graph_does_not_affect_resources(self):
         source_graph = Graph.objects.create_graph(
             name="TEST RESOURCE",
             is_resource=True,
         )
-        draft_graph = source_graph.create_draft_graph()
 
         nodegroup = models.NodeGroup.objects.create()
         string_node = models.Node.objects.create(
@@ -2495,11 +2762,6 @@ class DraftGraphTests(ArchesTestCase):
             JSONSerializer().serialize(tile)
         )
 
-        updated_source_graph = source_graph.update_from_draft_graph(
-            draft_graph=draft_graph
-        )
-        draft_graph = updated_source_graph.create_draft_graph()
-
         resource_from_database = models.ResourceInstance.objects.get(pk=resource.pk)
         tile_from_database = models.TileModel.objects.get(pk=tile.pk)
 
@@ -2518,7 +2780,7 @@ class DraftGraphTests(ArchesTestCase):
             name="TEST RESOURCE",
             is_resource=True,
         )
-        draft_graph = source_graph.create_draft_graph()
+        draft_graph = source_graph.get_draft_graph()
 
         draft_graph.append_branch(
             "http://www.cidoc-crm.org/cidoc-crm/P1_is_identified_by",
@@ -2526,15 +2788,12 @@ class DraftGraphTests(ArchesTestCase):
         )
         draft_graph.save()
 
-        updated_source_graph = source_graph.update_from_draft_graph(
-            draft_graph=draft_graph
-        )
+        updated_source_graph = source_graph.promote_draft_graph_to_active_graph()
         draft_graph = updated_source_graph.create_draft_graph()
 
-        node = [node for node in draft_graph.nodes.values()][2]
-
-        # fixes flaky test
-        models.NodeGroup.objects.filter(pk=node.pk).delete()
+        node = [
+            node for node in draft_graph.nodes.values() if node.alias == "node_type"
+        ][0]
 
         nodegroup_count_before = models.NodeGroup.objects.count()
 
@@ -2554,8 +2813,8 @@ class DraftGraphTests(ArchesTestCase):
         node.nodegroup_id = updated_nodegroup_id
         node.save()
 
-        updated_source_graph = updated_source_graph.update_from_draft_graph(
-            draft_graph=draft_graph
+        updated_source_graph = (
+            updated_source_graph.promote_draft_graph_to_active_graph()
         )
         draft_graph = updated_source_graph.create_draft_graph()
 
@@ -2570,8 +2829,8 @@ class DraftGraphTests(ArchesTestCase):
         node.nodegroup_id = original_nodegroup_id
         node.save()
 
-        updated_source_graph = updated_source_graph.update_from_draft_graph(
-            draft_graph=draft_graph
+        updated_source_graph = (
+            updated_source_graph.promote_draft_graph_to_active_graph()
         )
         draft_graph = updated_source_graph.create_draft_graph()
 
@@ -2594,15 +2853,13 @@ class DraftGraphTests(ArchesTestCase):
             name="TEST RESOURCE",
             is_resource=True,
         )
-        draft_graph = source_graph.create_draft_graph()
+        draft_graph = source_graph.get_draft_graph()
 
         # test adding slug
         draft_graph.slug = "test-resource"
         draft_graph.save()
 
-        updated_source_graph = source_graph.update_from_draft_graph(
-            draft_graph=draft_graph
-        )
+        updated_source_graph = source_graph.promote_draft_graph_to_active_graph()
         draft_graph = updated_source_graph.create_draft_graph()
 
         serialized_draft_graph = JSONDeserializer().deserialize(
@@ -2622,8 +2879,8 @@ class DraftGraphTests(ArchesTestCase):
         draft_graph.slug = "test-resource-two"
         draft_graph.save()
 
-        updated_source_graph = updated_source_graph.update_from_draft_graph(
-            draft_graph=draft_graph
+        updated_source_graph = (
+            updated_source_graph.promote_draft_graph_to_active_graph()
         )
         draft_graph = updated_source_graph.create_draft_graph()
 
@@ -2645,21 +2902,19 @@ class DraftGraphTests(ArchesTestCase):
             name="TEST RESOURCE",
             is_resource=True,
         )
-        draft_graph = source_graph.create_draft_graph()
+        draft_graph = source_graph.get_draft_graph()
 
         draft_graph.slug = "test-resource"
         draft_graph.save()
 
-        updated_source_graph = source_graph.update_from_draft_graph(
-            draft_graph=draft_graph
-        )
+        updated_source_graph = source_graph.promote_draft_graph_to_active_graph()
         draft_graph = updated_source_graph.create_draft_graph()
 
         draft_graph.name = "TEST RESOURCE TWO"
         draft_graph.save()
 
-        updated_source_graph = updated_source_graph.update_from_draft_graph(
-            draft_graph=draft_graph
+        updated_source_graph = (
+            updated_source_graph.promote_draft_graph_to_active_graph()
         )
         draft_graph = updated_source_graph.create_draft_graph()
 

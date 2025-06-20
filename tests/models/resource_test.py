@@ -40,6 +40,11 @@ from arches.app.utils.index_database import (
     index_resources_by_type,
     index_resources_using_singleprocessing,
 )
+from arches.app.utils.permission_backend import (
+    user_can_edit_resource,
+    user_can_delete_resource,
+    check_resource_instance_permissions,
+)
 from arches.test.utils import sync_overridden_test_settings_to_arches
 from tests.base_test import ArchesTestCase
 
@@ -85,8 +90,22 @@ class ResourceTests(ArchesTestCase):
                 codename="can_edit_all_resource_instance_lifecycle_states"
             )
         )
+        cls.permissioned_user.user_permissions.add(
+            Permission.objects.get(
+                codename="can_delete_all_resource_instance_lifecycle_states"
+            )
+        )
 
         graph = Graph.objects.get(pk=cls.search_model_graphid)
+        lifecycle_function = models.Function.objects.create(
+            functionid=uuid.uuid4(),
+            functiontype="lifecyclehandler",
+            modulename="base.py",
+            classname="BaseFunction",
+        )
+        models.FunctionXGraph.objects.create(
+            graph=graph, function=lifecycle_function, config={}
+        )
         graph.publish(user=cls.user)
 
         nodegroup = models.NodeGroup.objects.get(
@@ -207,11 +226,13 @@ class ResourceTests(ArchesTestCase):
         cls.state2 = models.ResourceInstanceLifecycleState.objects.create(
             id=uuid.uuid4(), name="State 2", resource_instance_lifecycle=cls.lifecycle
         )
+        cls.state2.can_edit_resource_instances = True
+        cls.state2.can_delete_resource_instances = True
+        cls.state2.save()
 
         cls.test_resource.resource_instance_lifecycle_state = cls.state1
 
         cls.test_resource.save()
-
         # add delay to allow for indexes to be updated
         time.sleep(1)
 
@@ -258,6 +279,77 @@ class ResourceTests(ArchesTestCase):
         self.assertEqual(
             self.test_resource.resource_instance_lifecycle_state.pk, self.state1.pk
         )
+
+    def test_lifecycle_permissions(self):
+        self.test_resource.graph.resource_instance_lifecycle = self.lifecycle
+        self.test_resource.graph.save()
+        self.user.groups.add(Group.objects.get(name="Resource Editor"))
+
+        self.test_resource.update_resource_instance_lifecycle_state(
+            self.permissioned_user, self.state1
+        )
+        self.assertEqual(
+            user_can_edit_resource(
+                self.user, resourceid=None, resource=self.test_resource
+            ),
+            False,
+        )
+
+        self.assertEqual(
+            user_can_edit_resource(
+                self.permissioned_user, resourceid=None, resource=self.test_resource
+            ),
+            True,
+        )
+
+        self.assertEqual(
+            user_can_delete_resource(
+                self.user, resourceid=None, resource=self.test_resource
+            ),
+            False,
+        )
+
+        self.assertEqual(
+            user_can_delete_resource(
+                self.permissioned_user, resourceid=None, resource=self.test_resource
+            ),
+            True,
+        )
+        self.test_resource.update_resource_instance_lifecycle_state(
+            self.permissioned_user, self.state2
+        )
+        self.assertEqual(
+            user_can_edit_resource(
+                self.user, resourceid=None, resource=self.test_resource
+            ),
+            True,
+        )
+
+        self.assertEqual(
+            user_can_edit_resource(
+                self.permissioned_user, resourceid=None, resource=self.test_resource
+            ),
+            True,
+        )
+
+        self.assertEqual(
+            user_can_delete_resource(
+                self.user, resourceid=None, resource=self.test_resource
+            ),
+            True,
+        )
+
+        self.assertEqual(
+            user_can_delete_resource(
+                self.permissioned_user, resourceid=None, resource=self.test_resource
+            ),
+            True,
+        )
+
+    @patch("arches.app.functions.base.BaseFunction.on_update_lifecycle_state")
+    def test_run_lifecycle_functions(self, mock_on_update_lifecycle_state):
+        self.test_resource.run_lifecycle_handlers(self.state2)
+        mock_on_update_lifecycle_state.assert_called_once()
 
     def test_get_node_value_string(self):
         """
@@ -485,6 +577,13 @@ class ResourceTests(ArchesTestCase):
                     q for q in queries if q["sql"].startswith('SELECT "tiles"."tileid"')
                 ]
                 self.assertEqual(len(tile_selects), 1)
+
+                non_guardian_user_selects = [
+                    q
+                    for q in queries
+                    if q["sql"].endswith('FROM "auth_user"') and "guardian" not in q
+                ]
+                self.assertEqual(len(non_guardian_user_selects), 1)
 
     def test_self_referring_resource_instance_descriptor(self):
         # Create a nodegroup with a string node and a resource-instance node.

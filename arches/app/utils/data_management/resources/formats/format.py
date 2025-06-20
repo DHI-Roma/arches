@@ -191,8 +191,8 @@ class Reader(object):
                     from_resource_graph_id=relation["from_resource_graph"],
                     to_resource_graph_id=relation["to_resource_graph"],
                     relationshiptype=str(relation["relationshiptype"]),
-                    nodeid=relation["nodeid"],
-                    tileid=relation["tileid"],
+                    node_id=relation["nodeid"],
+                    tile_id=relation["tileid"],
                     notes=relation["notes"],
                 )
                 relation.save()
@@ -308,7 +308,13 @@ class Writer(object):
             )
 
         if graph_id:
-            filters = {"resourceinstance__graph_id": graph_id}
+            filters = {
+                "resourceinstance__graph_id": graph_id,
+                # Get tiles only from the latest graph publication.
+                "resourceinstance__graph_publication": models.F(
+                    "resourceinstance__graph__publication"
+                ),
+            }
             if user:
                 filters["nodegroup_id__in"] = permitted_nodegroups
             self.tiles = models.TileModel.objects.filter(**filters).select_related(

@@ -19,15 +19,18 @@ along with this program. If not, see <http://www.gnu.org/licenses/>.
 import json
 import logging
 import uuid
+from contextlib import contextmanager
 from copy import deepcopy
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import transaction, connection
+from django.db.models import Q, prefetch_related_objects
 from django.db.utils import IntegrityError
 from arches.app.const import IntegrityCheck
 from arches.app.models import models
 from arches.app.models.card import Card
 from arches.app.models.querysets.graph import GraphQuerySet
 from arches.app.models.system_settings import settings
+from arches.app.models.utils import make_name_unique
 from arches.app.datatypes.datatypes import DataTypeFactory
 from arches.app.etl_modules.bulk_data_deletion import BulkDataDeletion
 from arches.app.utils.betterJSONSerializer import JSONSerializer, JSONDeserializer
@@ -35,10 +38,10 @@ from arches.app.search.search_engine_factory import SearchEngineFactory
 from arches.app.utils.i18n import LanguageSynchronizer
 from django.utils.translation import gettext as _
 from pyld.jsonld import compact, JsonLdError
-from django.db.models.base import Deferred
 from django.utils import translation
 from guardian.models import GroupObjectPermission, UserObjectPermission
 
+from arches.app.models.fields.i18n import I18n_JSON
 
 logger = logging.getLogger(__name__)
 
@@ -56,28 +59,14 @@ class Graph(models.GraphModel):
 
     def __init__(self, *args, **kwargs):
         super(Graph, self).__init__(*args, **kwargs)
-        # from models.GraphModel
-        # self.graphid = None
-        # self.name = ''
-        # self.description = ''
-        # self.deploymentfile = ''
-        # self.author = ''
-        # self.deploymentdate = None
-        # self.version = ''
-        # self.isresource = False
-        # self.iconclass = ''
-        # self.color = ''
-        # self.subtitle = ''
-        # self.ontology = None
-        # self.functions = []
-        # end from models.GraphModel
         self.root = None
         self.nodes = {}
         self.edges = {}
         self.cards = {}
         self.widgets = {}
+        self.functions_x_graphs = []
         self._nodegroups_to_delete = []
-        self._functions = []
+        self._spatial_views = []
         self._card_constraints = []
         self._constraints_x_nodes = []
         self.temp_node_name = _("New Node")
@@ -90,12 +79,14 @@ class Graph(models.GraphModel):
                         "nodes",
                         "edges",
                         "cards",
-                        "functions",
+                        "functions",  # needed for django reverse
+                        "functions_x_graphs",
                         "is_editable",
                         "publication",
                         "user_permissions",
                         "group_permissions",
                         "resource_instance_lifecycle",
+                        "spatial_views",
                     ):
                         setattr(self, key, value)
 
@@ -118,6 +109,11 @@ class Graph(models.GraphModel):
                 for card in args[0]["cards"]:
                     self.add_card(card)
 
+                if "spatial_views" in args[0]:
+                    for spatial_view in args[0]["spatial_views"]:
+                        spatial_view = models.SpatialView(**spatial_view)
+                        self.add_spatial_view(spatial_view)
+
                 def check_default_configs(default_configs, configs):
                     if default_configs is not None:
                         if configs is None:
@@ -128,16 +124,17 @@ class Graph(models.GraphModel):
                     return configs
 
                 if "functions_x_graphs" in args[0]:
-                    for function in args[0]["functions_x_graphs"]:
-                        function_x_graph_config = function["config"]
+                    for function_x_graph in args[0]["functions_x_graphs"]:
+                        function_x_graph_config = function_x_graph["config"]
                         default_config = models.Function.objects.get(
-                            functionid=function["function_id"]
+                            functionid=function_x_graph["function_id"]
                         ).defaultconfig
-                        function["config"] = check_default_configs(
+                        function_x_graph["config"] = check_default_configs(
                             default_config, function_x_graph_config
                         )
+                        function_x_graph["graph_id"] = self.graphid
 
-                        self.add_function(function)
+                        self.add_function_x_graph(function_x_graph)
 
                 self.populate_null_nodegroups()
 
@@ -159,7 +156,7 @@ class Graph(models.GraphModel):
                 for node in self.nodes.values():
                     if node.istopnode:
                         self.root = node
-
+                self.functions_x_graphs = super().get_functions_x_graphs()
                 self.edges = {edge.pk: edge for edge in super().get_edges()}
                 # This resolves a tricky pointer issue with `append_branch`
                 # and possibly other functions as well. This block should
@@ -183,10 +180,11 @@ class Graph(models.GraphModel):
         self.nodes = {}
         self.edges = {}
         self.cards = {}
+        self.widgets = {}
 
-        nodes = self.node_set.all()
+        nodes = self.node_set.prefetch_related("nodegroup")
         edges = self.edge_set.all()
-        cards = self.cardmodel_set.all()
+        cards = self.cardmodel_set.prefetch_related("nodegroup")
 
         edge_lookup = {
             edge["edgeid"]: edge
@@ -274,7 +272,7 @@ class Graph(models.GraphModel):
         if self.ontology_id is None:
             node.ontologyclass = None
         if node.pk is None:
-            node.pk = uuid.uuid1()
+            node.pk = uuid.uuid4()
         if isinstance(node.pk, str):
             node.pk = uuid.UUID(node.pk)
         if node.istopnode:
@@ -308,7 +306,7 @@ class Graph(models.GraphModel):
         edge.graph = self
 
         if edge.pk is None:
-            edge.pk = uuid.uuid1()
+            edge.pk = uuid.uuid4()
         if self.ontology is None:
             edge.ontologyproperty = None
         self.edges[edge.pk] = edge
@@ -367,31 +365,47 @@ class Graph(models.GraphModel):
         card.graph = self
 
         if card.pk is None:
-            card.pk = uuid.uuid1()
+            card.pk = uuid.uuid4()
 
         self.cards[card.pk] = card
         self.has_unpublished_changes = True
 
         return card
 
-    def add_function(self, function):
+    def add_function_x_graph(self, function_x_graph):
         """
         Adds a FunctionXGraph record to this graph
 
         Arguments:
-        function -- an object representing a FunctionXGraph instance or an actual FunctionXGraph instance
+        function_x_graph -- an object representing a FunctionXGraph instance or an actual FunctionXGraph instance
 
         """
 
-        if not isinstance(function, models.FunctionXGraph):
-            function = models.FunctionXGraph(**function.copy())
+        if not isinstance(function_x_graph, models.FunctionXGraph):
+            function_x_graph = models.FunctionXGraph(**function_x_graph.copy())
 
-        function.graph = self
+        function_x_graph.graph = self
 
-        self._functions.append(function)
+        self.functions_x_graphs.append(function_x_graph)
         self.has_unpublished_changes = True
 
-        return function
+        return function_x_graph
+
+    def add_spatial_view(self, spatial_view):
+        """
+        Adds a SpatialView to this graph
+
+        Arguments:
+        spatial_view -- an object representing a SpatialView instance or an actual SpatialView instance
+
+        """
+
+        if not isinstance(spatial_view, models.SpatialView):
+            spatial_view = models.SpatialView(**spatial_view.copy())
+
+        self._spatial_views.append(spatial_view)
+        self.has_unpublished_changes = True
+        return spatial_view
 
     def add_resource_instance_lifecycle(self, resource_instance_lifecycle):
         """
@@ -458,14 +472,13 @@ class Graph(models.GraphModel):
 
     def update_es_node_mapping(self, node, datatype_factory, se):
         if self.isresource:
-            already_saved = models.Node.objects.filter(pk=node.nodeid).exists()
             saved_node_datatype = None
-            if already_saved:
-                saved_node = models.Node.objects.get(pk=node.nodeid)
+            target_node_id = node.source_identifier_id or node.nodeid
+            if saved_node := models.Node.objects.filter(pk=target_node_id).first():
                 saved_node_datatype = saved_node.datatype
             if saved_node_datatype != node.datatype:
                 datatype = datatype_factory.get_instance(node.datatype)
-                datatype_mapping = datatype.get_es_mapping(node.nodeid)
+                datatype_mapping = datatype.get_es_mapping(target_node_id)
                 if (
                     datatype_mapping
                     and datatype_factory.datatypes[node.datatype].defaultwidget
@@ -486,8 +499,6 @@ class Graph(models.GraphModel):
 
         with transaction.atomic():
             super(Graph, self).save()
-
-            has_unpublished_changes = self.has_unpublished_changes
 
             for nodegroup in self.get_nodegroups():
                 nodegroup.save()
@@ -534,6 +545,9 @@ class Graph(models.GraphModel):
             for card in self.cards.values():
                 card.save()
 
+            for function_x_graph in self.functions_x_graphs:
+                function_x_graph.save()
+
             for constraint in self._card_constraints:
                 constraint.save()
 
@@ -549,26 +563,32 @@ class Graph(models.GraphModel):
                 for widget in self.widgets.values():
                     widget.save()
 
-            for functionxgraph in self._functions:
+            for function_x_graph in self.functions_x_graphs:
                 # Right now this only saves a functionxgraph record if the function is present in the database. Otherwise it silently fails.
-                if functionxgraph.function_id in [
+                if function_x_graph.function_id in [
                     str(id)
                     for id in models.Function.objects.values_list(
                         "functionid", flat=True
                     )
                 ]:
 
-                    previous_functionxgraph_list = models.FunctionXGraph.objects.filter(
-                        function_id=functionxgraph.function_id, graph_id=self.pk
+                    previous_function_x_graph_list = (
+                        models.FunctionXGraph.objects.filter(
+                            function_id=function_x_graph.function_id, graph_id=self.pk
+                        )
                     )
-                    if len(previous_functionxgraph_list):
-                        previous_functionxgraph = previous_functionxgraph_list[0]
-                        previous_functionxgraph.delete()
+                    if len(previous_function_x_graph_list):
+                        previous_function_x_graph = previous_function_x_graph_list[0]
+                        previous_function_x_graph.delete()
 
                 try:
-                    functionxgraph.save()
+                    function_x_graph.save()
                 except:
                     pass
+
+            for spatial_view in self._spatial_views:
+                spatial_view.full_clean(exclude=["language"])
+                spatial_view.save()
 
             # edge case for instantiating a serialized_graph that has a publication
             if self.publication and not len(
@@ -610,10 +630,7 @@ class Graph(models.GraphModel):
                 nodegroup.delete()
             self._nodegroups_to_delete = []
 
-            # becuase of signals listeners on related graph entities,
-            # `has_unpublished_changes` must be updated manually after
-            # all related entities have updated.
-            self.has_unpublished_changes = has_unpublished_changes
+            self.has_unpublished_changes = True
             super().save()
 
         return self
@@ -630,8 +647,7 @@ class Graph(models.GraphModel):
         """
         with transaction.atomic():
             try:
-                draft_graph = Graph.objects.get(source_identifier_id=self.graphid)
-                draft_graph.delete()
+                self.delete_draft_graph()
             except Graph.DoesNotExist:
                 pass  # no draft_graph to delete
 
@@ -649,6 +665,9 @@ class Graph(models.GraphModel):
 
             for widget in self.widgets.values():
                 widget.delete()
+
+            for function_x_graph in self.functions_x_graphs:
+                function_x_graph.delete()
 
         self.has_unpublished_changes = True
 
@@ -780,7 +799,7 @@ class Graph(models.GraphModel):
                 node.sourcebranchpublication_id = branch_publication_id
 
                 if node.alias and node.alias in aliases:
-                    node.alias = self.make_name_unique(
+                    node.alias = make_name_unique(
                         node.alias, aliases + branch_aliases, "_n"
                     )
 
@@ -796,7 +815,7 @@ class Graph(models.GraphModel):
             sibling_node_names = [
                 node.name for node in self.get_sibling_nodes(branch_copy.root)
             ]
-            branch_copy.root.name = self.make_name_unique(
+            branch_copy.root.name = make_name_unique(
                 branch_copy.root.name, sibling_node_names
             )
             branch_copy.root.description = branch_graph.description
@@ -811,22 +830,6 @@ class Graph(models.GraphModel):
             else:
                 return branch_copy
 
-    def make_name_unique(self, name, names_to_check, suffix_delimiter="_"):
-        """
-        Makes a name unique among a list of names
-
-        Arguments:
-        name -- the name to check and modfiy to make unique in the list of "names_to_check"
-        names_to_check -- a list of names that "name" should be unique among
-        """
-
-        i = 1
-        temp_node_name = name
-        while temp_node_name in names_to_check:
-            temp_node_name = "{0}{1}{2}".format(name, suffix_delimiter, i)
-            i += 1
-        return temp_node_name
-
     def append_node(self, nodeid=None):
         """
         Appends a single node onto this graph
@@ -837,13 +840,13 @@ class Graph(models.GraphModel):
 
         """
         node_names = [node.name for node in self.nodes.values()]
-        temp_node_name = self.make_name_unique(self.temp_node_name, node_names)
+        temp_node_name = make_name_unique(self.temp_node_name, node_names)
         nodeToAppendTo = self.nodes[uuid.UUID(str(nodeid))] if nodeid else self.root
         card = None
         nodegroup = None
 
         if nodeToAppendTo.nodeid == self.root.nodeid and self.isresource is True:
-            newid = uuid.uuid1()
+            newid = uuid.uuid4()
             nodegroup = models.NodeGroup.objects.create(pk=newid)
             card = models.CardModel.objects.create(
                 nodegroup=nodegroup, name=temp_node_name, graph=self
@@ -859,7 +862,7 @@ class Graph(models.GraphModel):
             )
         else:
             newNode = models.Node(
-                nodeid=uuid.uuid1(),
+                nodeid=uuid.uuid4(),
                 name=temp_node_name,
                 istopnode=False,
                 ontologyclass=None,
@@ -913,24 +916,16 @@ class Graph(models.GraphModel):
         Replaces node, nodegroup, card, and formids in configuration json objects during
         graph cloning/copying
         """
-        str_forms_config = json.dumps(config)
+        if isinstance(config, I18n_JSON):
+            str_forms_config = JSONSerializer().serialize(
+                config.serialize(use_raw_i18n_json=True)
+            )
+        else:
+            str_forms_config = json.dumps(config)
         for map in maps:
             for k, v in map.items():
                 str_forms_config = str_forms_config.replace(str(k), str(v))
         return json.loads(str_forms_config)
-
-    def copy_functions(self, other_graph, id_maps=[]):
-        """
-        Copies the graph_x_function relationships from a different graph and relates
-        the same functions to this graph.
-
-        """
-        for function_x_graph in other_graph.functionxgraph_set.all():
-            config_copy = self.replace_config_ids(function_x_graph.config, id_maps)
-            function_copy = models.FunctionXGraph(
-                function=function_x_graph.function, config=config_copy, graph=self
-            )
-            function_copy.save()
 
     def copy(self, root=None, set_source=False):
         """
@@ -1003,7 +998,7 @@ class Graph(models.GraphModel):
                 node.config["advancedStyle"] = ""
                 node.config["advancedStyling"] = False
 
-        copy_of_self.pk = uuid.uuid1()
+        copy_of_self.pk = uuid.uuid4()
         node_map = {}
         card_map = {}
         for node_id in node_ids:
@@ -1014,7 +1009,7 @@ class Graph(models.GraphModel):
             is_collector = node.is_collector
             if set_source:
                 node.source_identifier_id = node.pk
-            node.pk = uuid.uuid1()
+            node.pk = uuid.uuid4()
             node_map[node_id] = node.pk
 
             if is_collector:
@@ -1028,7 +1023,7 @@ class Graph(models.GraphModel):
                     nodegroup_map[old_nodegroup_id] = node.nodegroup_id
                 for card in copy_of_self.cards.values():
                     if str(card.nodegroup_id) == str(old_nodegroup_id):
-                        new_id = uuid.uuid1()
+                        new_id = uuid.uuid4()
                         if set_source:
                             card.source_identifier_id = card.pk
                         card_map[card.pk] = new_id
@@ -1043,7 +1038,7 @@ class Graph(models.GraphModel):
             if set_source:
                 widget.source_identifier_id = widget.pk
 
-            widget.pk = uuid.uuid1()
+            widget.pk = uuid.uuid4()
             widget.node_id = node_map[widget.node_id]
             widget.card_id = card_map[widget.card_id]
 
@@ -1056,7 +1051,7 @@ class Graph(models.GraphModel):
         for edge_id, edge in copy_of_self.edges.items():
             if set_source:
                 edge.source_identifier_id = edge.pk
-            edge.pk = uuid.uuid1()
+            edge.pk = uuid.uuid4()
             edge.graph = copy_of_self
             copied_domainnode = edge.domainnode
             copied_rangenode = edge.rangenode
@@ -1095,6 +1090,18 @@ class Graph(models.GraphModel):
                         sorted_widget_ids.append(str(widget_id))
 
                 copied_card.config["sortedWidgetIds"] = sorted_widget_ids
+
+        for node in copy_of_self.nodes.values():
+            node.config = self.replace_config_ids(
+                node.config, [node_map, nodegroup_map]
+            )
+
+        for function_x_graph in copy_of_self.functions_x_graphs:
+            function_x_graph.pk = uuid.uuid4()
+            function_x_graph.graph = copy_of_self
+            function_x_graph.config = self.replace_config_ids(
+                function_x_graph.config, [node_map, nodegroup_map]
+            )
 
         return {
             "copy": copy_of_self,
@@ -1471,10 +1478,14 @@ class Graph(models.GraphModel):
                 if nodeid is not None
                 else self.root.ontologyclass
             )
-            ontology_classes = models.OntologyClass.objects.get(
-                source=source, ontology=self.ontology
+            target_up = (
+                models.OntologyClass.objects.filter(
+                    source=source, ontology=self.ontology
+                )
+                .values_list("target__up", flat=True)
+                .first()
             )
-            return ontology_classes.target["up"]
+            return target_up
         else:
             return []
 
@@ -1579,16 +1590,50 @@ class Graph(models.GraphModel):
         if self.should_use_published_graph() and not force_recalculation:
             return super().get_nodegroups()
         else:
+            prefetch_related_objects(list(self.nodes.values()), "nodegroup")
             nodegroups = set()
             for node in self.nodes.values():
                 if node.is_collector:
                     nodegroups.add(node.nodegroup)
+            prefetch_related_objects(list(self.cards.values()), "nodegroup")
             for card in self.cards.values():
                 try:
                     nodegroups.add(card.nodegroup)
                 except models.NodeGroup.DoesNotExist:
                     pass
             return list(nodegroups)
+
+    @contextmanager
+    @transaction.atomic
+    def preserve_staging_records(self):
+        nodegroups = self.get_nodegroups(force_recalculation=True)
+        error_query = models.LoadErrors.objects.filter(
+            Q(nodegroup__in=nodegroups) | Q(node__in=self.nodes.values())
+        )
+        staging_query = models.LoadStaging.objects.filter(nodegroup__in=nodegroups)
+        error_objs = set(error_query)
+        staging_objs = set(staging_query)
+        error_query.update(nodegroup=None, node=None)
+        staging_query.update(nodegroup=None)
+
+        try:
+            yield
+        finally:
+            # Restore the nodegroup references that still exist.
+            all_nodegroup_ids = models.NodeGroup.objects.values_list("pk", flat=True)
+            valid_errors = {
+                obj for obj in error_objs if obj.nodegroup_id in all_nodegroup_ids
+            }
+            valid_stagings = {
+                obj for obj in staging_objs if obj.nodegroup_id in all_nodegroup_ids
+            }
+            models.LoadErrors.objects.bulk_update(valid_errors, fields=["nodegroup"])
+            models.LoadStaging.objects.bulk_update(valid_stagings, fields=["nodegroup"])
+
+            # Restore the node references that still exist.
+            all_node_ids = models.Node.objects.values_list("pk", flat=True)
+            valid_errors = {obj for obj in error_objs if obj.node_id in all_node_ids}
+            models.LoadErrors.objects.bulk_update(valid_errors, fields=["node"])
 
     def update_permissions_from_serialized_graph(self, serialized_graph):
         if (
@@ -1629,7 +1674,7 @@ class Graph(models.GraphModel):
                         }
                     )
                     user_permission_nodegroup_id_to_nodegroup = {
-                        nodegroup.pk: nodegroup
+                        str(nodegroup.pk): nodegroup
                         for nodegroup in user_permission_nodegroups
                     }
 
@@ -1677,7 +1722,7 @@ class Graph(models.GraphModel):
                         }
                     )
                     group_permission_nodegroup_id_to_nodegroup = {
-                        nodegroup.pk: nodegroup
+                        str(nodegroup.pk): nodegroup
                         for nodegroup in group_permission_nodegroups
                     }
 
@@ -1841,6 +1886,8 @@ class Graph(models.GraphModel):
         if self.should_use_published_graph() and not force_recalculation:
             return super().get_cards()
 
+        prefetch_related_objects(list(self.cards.values()), "constraintmodel_set")
+
         cards = []
         for card in self.cards.values():
             if self.isresource:
@@ -1976,15 +2023,18 @@ class Graph(models.GraphModel):
             else:
                 ret.pop("group_permissions", None)
 
+            ret["spatial_views"] = models.SpatialView.objects.select_related().filter(
+                geometrynode__graph__in=[self.source_identifier_id, self.graphid]
+            )
             ret["domain_connections"] = (
                 self.get_valid_domain_ontology_classes()
                 if "domain_connections" not in exclude
                 else ret.pop("domain_connections", None)
             )
-            ret["functions"] = (
+            ret["functions_x_graphs"] = (
                 models.FunctionXGraph.objects.filter(graph_id=self.graphid)
-                if "functions" not in exclude
-                else ret.pop("functions", None)
+                if "functions_x_graphs" not in exclude
+                else ret.pop("functions_x_graphs", None)
             )
 
             parentproperties = {self.root.nodeid: ""}
@@ -2005,7 +2055,7 @@ class Graph(models.GraphModel):
                     nodeobj = JSONSerializer().serializeToPython(
                         node, use_raw_i18n_json=use_raw_i18n_json
                     )
-                    nodeobj["parentproperty"] = parentproperties[node.nodeid]
+                    nodeobj["parentproperty"] = parentproperties.get(node.nodeid)
                     nodes.append(nodeobj)
 
                 ret["nodes"] = sorted(
@@ -2057,6 +2107,35 @@ class Graph(models.GraphModel):
                     )
                     raise GraphValidationError(message)
 
+    def _validate_widget_count(self, node):
+        if node.datatype == "semantic":
+            return
+
+        def pk_getter(widget):
+            """get_widgets() might return a dict or a model instance."""
+            try:
+                return widget.pk
+            except AttributeError:
+                return widget["node_id"]
+
+        widgets = self.get_widgets()
+        config_count = len(
+            [widget for widget in widgets if pk_getter(widget) == node.pk]
+        )
+        if config_count > 1:
+            raise GraphValidationError(
+                _("The node '{alias}' has too many widget configurations.").format(
+                    alias=node.alias
+                ),
+                IntegrityCheck.TOO_MANY_WIDGETS.value,
+            )
+        # This not yet an error condition, but it should be in the future.
+        # elif config_count == 0:
+        #     raise GraphValidationError(
+        #         _("The node '{alias}' has no widget configurations.").format(alias=node.alias),
+        #         IntegrityCheck.NO_WIDGETS.value,
+        #     )
+
     def create_node_alias(self, node):
         """
         Assigns a unique, slugified version of a node's name as that node's alias.
@@ -2071,7 +2150,7 @@ class Graph(models.GraphModel):
                 aliases = [
                     n.alias for n in self.nodes.values() if node.alias != n.alias
                 ]
-                node.alias = self.make_name_unique(row[0], aliases, "_n")
+                node.alias = make_name_unique(row[0], aliases, "_n")
                 node.hascustomalias = False
         return node.alias
 
@@ -2112,6 +2191,30 @@ class Graph(models.GraphModel):
                         999,
                     )
 
+        if self.get_draft_graph():
+            raise GraphValidationError(
+                _(
+                    "You cannot save a graph that has an active draft. \
+                        Please publish or delete the draft before saving this graph."
+                ),
+                1019,
+            )
+
+        # validates that a graph slug has not changed on a published graph
+        published_graph = self.get_published_graph()
+        if (
+            self.publication_id
+            and not self.source_identifier_id
+            and published_graph is not None
+            and self.slug != published_graph.serialized_graph["slug"]
+        ):
+            raise GraphValidationError(
+                _(
+                    "You cannot change the slug of a published graph. Please create a new publication to edit graph slug."
+                ),
+                1018,
+            )
+
         def validate_fieldname(fieldname, fieldnames):
             if node.fieldname == "":
                 raise GraphValidationError(_("Field name must not be blank."), 1008)
@@ -2146,6 +2249,7 @@ class Graph(models.GraphModel):
 
         for node in self.nodes.values():
             self._validate_node_name(node)
+            self._validate_widget_count(node)
             datatype = datatype_factory.get_instance(node.datatype)
             datatype.validate_node(node)
             if node.exportable is True:
@@ -2251,7 +2355,7 @@ class Graph(models.GraphModel):
                 _("The json-ld context you supplied wasn't formatted correctly."), 1006
             )
 
-        if self.slug is not None:
+        if self.slug:
             graphs_with_matching_slug = (
                 models.GraphModel.objects.exclude(slug__isnull=True)
                 .exclude(source_identifier__isnull=False)
@@ -2270,13 +2374,18 @@ class Graph(models.GraphModel):
                         ).format(slug=self.slug),
                         1007,
                     )
+        else:
+            raise GraphValidationError(
+                _("You must supply a slug for your graph."),
+                IntegrityCheck.GRAPH_MISSING_SLUG.value,
+            )
 
     def update_published_graphs(self, user=None, notes=None):
         """
         Changes information in in GraphPublication models without creating
         a new entry in graphs_x_published_graphs table
         """
-        if self.source_identifier_id:  # don't update future graphs
+        if self.source_identifier_id:  # don't update draft_graph
             raise Exception(
                 "Cannot update graphs with a source_identifier. Please apply updates to the source graph."
             )
@@ -2341,13 +2450,12 @@ class Graph(models.GraphModel):
                 update_published_graphs=False
             )
 
-            try:
-                previous_draft_graph = Graph.objects.get(
-                    source_identifier_id=self.graphid
+            if self.get_draft_graph():
+                raise GraphPublicationError(
+                    message=_(
+                        "A draft graph already exists for this graph. Please update the existing draft graph instead."
+                    )
                 )
-                previous_draft_graph.delete()
-            except Graph.DoesNotExist:
-                pass
 
             graph_copy = self.copy(set_source=True)
 
@@ -2357,25 +2465,51 @@ class Graph(models.GraphModel):
             # draft_graphs do not interact with `Resource` objects
             draft_graph.resource_instance_lifecycle = None
 
-            # draft_graphs are never published, so on creation
-            # `has_unpublished_changes` should never be true, regardless
-            # of the state of the source_graph.
-            draft_graph.has_unpublished_changes = False
-
             draft_graph.root.set_relatable_resources(
                 [node.pk for node in self.root.get_relatable_resources()]
             )
 
             draft_graph.save(validate=False)
 
+            models.GraphModel.objects.filter(pk=draft_graph.pk).update(
+                has_unpublished_changes=False
+            )
+
+            # draft_graphs are never published, so on creation
+            # `has_unpublished_changes` should never be true, regardless
+            # of the state of the source_graph.
+            draft_graph.has_unpublished_changes = False
+
             return draft_graph
 
-    def update_from_draft_graph(self, draft_graph):
+    def get_draft_graph(self):
+        """
+        Returns the draft_graph associated with this graph.
+        """
+        return Graph.objects.filter(source_identifier_id=self.graphid).first()
+
+    def delete_draft_graph(self):
+        """
+        Deletes the draft_graph and all related entities.
+        """
+        draft_graph = self.get_draft_graph()
+
+        if not draft_graph:
+            raise Graph.DoesNotExist()
+
+        draft_graph.delete()
+
+    def promote_draft_graph_to_active_graph(self):
         """
         Updates the graph with any changes made to the draft_graph,
         deletes the draft_graph and related entities, then creates
         a new draft_graph from the updated graph.
         """
+        draft_graph = self.get_draft_graph()
+
+        if not draft_graph:
+            raise Graph.DoesNotExist()
+
         serialized_source_graph = JSONDeserializer().deserialize(
             JSONSerializer().serialize(self)
         )
@@ -2436,6 +2570,10 @@ class Graph(models.GraphModel):
             if serialized_node["source_identifier_id"]:
                 serialized_node["nodeid"] = serialized_node["source_identifier_id"]
                 serialized_node["source_identifier_id"] = None
+
+            serialized_node["config"] = self.replace_config_ids(
+                serialized_node["config"], [node_id_to_node_source_identifier_id]
+            )
 
             updated_nodegroup_id = node_id_to_node_source_identifier_id.get(
                 serialized_node["nodegroup_id"]
@@ -2522,18 +2660,17 @@ class Graph(models.GraphModel):
             ]
         ]
 
+        serialized_draft_graph["functions_x_graphs"] = serialized_source_graph[
+            "functions_x_graphs"
+        ]
+
         return self.restore_state_from_serialized_graph(serialized_draft_graph)
 
     def restore_state_from_serialized_graph(self, serialized_graph):
         """
-        Restores a Graph's state from a serialized graph, and creates a
-        new draft_graph
+        Restores a Graph's state from a serialized graph
         """
-        with transaction.atomic():
-            draft_graph = Graph.objects.filter(source_identifier_id=self.pk).first()
-            if draft_graph:
-                draft_graph.delete()
-
+        with transaction.atomic(), self.preserve_staging_records():
             self.delete_associated_entities()
 
             for serialized_nodegroup in serialized_graph["nodegroups"]:
@@ -2621,7 +2758,9 @@ class Graph(models.GraphModel):
             updated_graph.has_unpublished_changes = False
             updated_graph.save(validate=False)
 
-            updated_graph.create_draft_graph()
+            models.GraphModel.objects.filter(pk=updated_graph.pk).update(
+                has_unpublished_changes=False,
+            )
 
             return Graph.objects.get(pk=updated_graph.pk)
 
@@ -2636,6 +2775,10 @@ class Graph(models.GraphModel):
         self.refresh_from_database()
 
         with transaction.atomic():
+            LanguageSynchronizer.synchronize_settings_with_db(
+                update_published_graphs=False
+            )
+
             publication = models.GraphXPublishedGraph.objects.create(
                 graph=self, notes=notes, user=user
             )

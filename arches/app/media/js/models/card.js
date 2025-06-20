@@ -9,7 +9,7 @@ import CardWidgetModel from 'models/card-widget';
 import CardConstraintsViewModel from 'viewmodels/card-constraints';
 import cardComponentLookup from 'card-components';
 
-export default AbstractModel.extend({
+const CardModel = AbstractModel.extend({
     /**
     * A backbone model to manage card data
     * @augments AbstractModel
@@ -201,8 +201,6 @@ export default AbstractModel.extend({
      */
     parse: function(attributes) {
         var self = this;
-        // console.log(attributes.data.constraints[0].nodes)
-        // console.log(attributes.data.constraints[0].nodes)
         this._attributes = attributes;
 
         _.each(attributes.data, function(value, key) {
@@ -349,6 +347,7 @@ export default AbstractModel.extend({
                 });
                 widget.label(originalWidgetData.label);
                 widget.widget_id(originalWidgetData.widget_id);
+                widget.visible(originalWidgetData.visible);
             }
         }, this);
         this.parse(this._attributes);
@@ -402,7 +401,7 @@ export default AbstractModel.extend({
         return AbstractModel.prototype.save.call(this, function(request, status, self) {
             if (status === 'success') {
                 this._card(JSON.stringify(this.toJSON()));
-                
+
                 // adds event to trigger dirty state in graph-designer
                 document.dispatchEvent(
                     new Event('cardSave')
@@ -415,3 +414,5 @@ export default AbstractModel.extend({
     }
 
 });
+
+export default CardModel;

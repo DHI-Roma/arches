@@ -18,6 +18,7 @@ along with this program. If not, see <http://www.gnu.org/licenses/>.
 
 import os
 import json
+import uuid
 from http import HTTPStatus
 
 from tests import test_settings
@@ -54,7 +55,6 @@ class GraphManagerViewTests(ArchesTestCase):
 
         cls.test_graph.save()
         cls.test_graph.publish()
-        cls.test_graph.create_draft_graph()
 
         cls.ROOT_ID = cls.test_graph.root.nodeid
         cls.GRAPH_ID = str(cls.test_graph.pk)
@@ -72,6 +72,7 @@ class GraphManagerViewTests(ArchesTestCase):
             "iconclass": "fa fa-angle-double-down",
             "isresource": False,
             "name": "Node/Node Type",
+            "slug": "node_type",
             "ontology_id": "e6e8db47-2ccf-11e6-927e-b8f6b115d7dd",
             "subtitle": "Represents a node and node type pairing",
             "version": "v1",
@@ -156,6 +157,8 @@ class GraphManagerViewTests(ArchesTestCase):
     @classmethod
     def create_test_graph(cls):
         test_graph = Graph.objects.create_graph()
+        test_graph.delete_draft_graph()
+
         test_graph.name = "TEST GRAPH"
         test_graph.subtitle = "ARCHES TEST GRAPH"
         test_graph.author = "Arches"
@@ -203,18 +206,6 @@ class GraphManagerViewTests(ArchesTestCase):
 
         edge_count = len(graph["edges"])
         self.assertEqual(edge_count, self.NODE_COUNT - 1)
-
-    def test_graph_manager_redirects_future_graph(self):
-        self.client.login(username="admin", password="admin")
-
-        draft_graph = Graph.objects.get(source_identifier_id=self.GRAPH_ID)
-        url = reverse("graph_designer", kwargs={"graphid": draft_graph.graphid})
-        response = self.client.get(url)
-
-        redirect_url = reverse("graph_designer", kwargs={"graphid": self.GRAPH_ID})
-        query_string = urlencode({"has_been_redirected_from_draft_graph": True})
-
-        self.assertRedirects(response, "{}?{}".format(redirect_url, query_string))
 
     def test_graph_settings(self):
         """
@@ -274,6 +265,22 @@ class GraphManagerViewTests(ArchesTestCase):
 
         self.assertEqual(node_.name, "new node name")
         self.assertTrue(node_.is_collector)
+
+    def test_node_reorder(self):
+        self.client.login(username="admin", password="admin")
+        url = reverse("reorder_nodes")
+        reversed_nodes = list(reversed(self.test_graph.nodes.values()))
+        post_data = JSONSerializer().serialize({"nodes": reversed_nodes})
+
+        # Start with an unpublished graph.
+        self.test_graph.publication = None
+        self.test_graph.save()
+        response = self.client.post(url, post_data, "application/json")
+
+        self.assertEqual(
+            [node["sortorder"] for node in response.json()["nodes"]],
+            [0, 1, 2, 3, 4],
+        )
 
     def test_node_delete(self):
         """
@@ -478,3 +485,18 @@ class GraphManagerViewTests(ArchesTestCase):
         self.assertEqual(imported_json[0], [])
         self.assertEqual(imported_json[1]["graphs_saved"], 1)
         self.assertEqual(imported_json[1]["name"], "Cardinality Test Model")
+
+    def test_save_new_card(self):
+        self.client.login(username="admin", password="admin")
+        new_card_id = str(uuid.uuid4())
+        response = self.client.post(
+            reverse("card", kwargs={"cardid": new_card_id}),
+            data={
+                "cardid": new_card_id,
+                "graph_id": str(self.test_graph.pk),
+                "nodegroup_id": str(self.test_graph.root.nodegroup_id),
+                "name": "My Card",
+            },
+            content_type="application/json",
+        )
+        self.assertContains(response, "My Card", status_code=HTTPStatus.OK)

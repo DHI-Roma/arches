@@ -1,8 +1,10 @@
 import $ from 'jquery';
 import _ from 'underscore';
 import ko from 'knockout';
+import koMapping from 'knockout-mapping';
 import arches from 'arches';
 import GraphPageView from 'views/graph/graph-page-view';
+import AlertViewModel from 'viewmodels/alert';
 import JsonErrorAlertViewModel from 'viewmodels/alert-json';
 import FunctionList from 'views/graph/function-manager/function-list';
 import AppliedFunctionList from 'views/graph/function-manager/applied-function-list';
@@ -19,8 +21,12 @@ var savedFunctions = ko.observableArray(_.map(data.applied_functions, function(f
 
 var viewModel = {
     loading: ko.observable(false),
-    selectedFunction: ko.observable()
+    selectedFunction: ko.observable(),
+    shouldShowUpdatePublishedGraphsButton: ko.observable(baseData.graph.has_unpublished_changes),
+    shouldShowPublishModal: ko.observable(false),
+    graph: koMapping.fromJS(baseData.graph),
 };
+const url = new URL(window.location);
 
 data.functions.forEach(function(func){
     functionModels.push(new FunctionModel(func));
@@ -41,6 +47,38 @@ viewModel.functionList.on('item-clicked', function(func){
     viewModel.appliedFunctionList.items.push(newAppliedFunction);
     viewModel.appliedFunctionList.selectItem(newAppliedFunction);
 });
+
+
+viewModel.showRestoreStateFromSerializedGraphAlert = function() {
+    viewModel.alert(new AlertViewModel(
+        'ep-alert-red',
+        arches.translations.confirmGraphRevert.title,
+        arches.translations.confirmGraphRevert.text,
+        function() {},
+        viewModel.restoreStateFromSerializedGraph,
+    ));    viewModel.alert(new AlertViewModel(
+        'ep-alert-red',
+        arches.translations.confirmGraphRevert.title,
+        arches.translations.confirmGraphRevert.text,
+        function() {},
+        viewModel.restoreStateFromSerializedGraph,
+    ));
+};
+
+viewModel.restoreStateFromSerializedGraph = function() {
+    viewModel.loading(true);
+
+    $.ajax({
+        type: "POST",
+        url: arches.urls.restore_state_from_serialized_graph(viewModel.graph.graphid()),
+        complete: function(response, status) {
+            if (status === 'success') { window.location.reload(); }
+            else {
+                viewModel.alert(new JsonErrorAlertViewModel('ep-alert-red', response.responseJSON));
+            }
+        }
+    });
+};
 
 viewModel.appliedFunctionList = new AppliedFunctionList({
     functions: ko.observableArray()
@@ -91,7 +129,7 @@ viewModel.save = function(){
     viewModel.loading(true);
     viewModel.appliedFunctionList.items().forEach(function(fn){
         if (
-            fn.dirty() 
+            fn.dirty()
             || !fn.function.component()
             || (viewModel.selectedFunction() && _.contains(savedFunctions(), viewModel.selectedFunction().function_id) === false)
         ) {
@@ -119,7 +157,44 @@ viewModel.save = function(){
             alertFailure(response.responseJSON);
         }
     });
+    viewModel.shouldShowUpdatePublishedGraphsButton(true);
 };
+
+viewModel.showUpdatePublishedGraphsAlert = function() {
+    viewModel.alert(new AlertViewModel(
+        'ep-alert-red',
+        arches.translations.confirmGraphPublicationEdit.title,
+        arches.translations.confirmGraphPublicationEdit.text,
+        function() {},
+        viewModel.updatePublishedGraphs
+    ));
+    viewModel.shouldShowUpdatePublishedGraphsButton(true);
+};
+
+viewModel.updatePublishedGraphs = function() {
+    viewModel.loading(true);
+
+    $.ajax({
+        type: "POST",
+        data: JSON.stringify({}),
+        url: arches.urls.update_published_graphs(viewModel.graph.graphid()),
+        success: function(response) {
+            window.location.href = window.location.pathname + '?has_updated_published_graph=true';
+        },
+        error: function(response) {
+            viewModel.shouldShowPublishModal(false);
+            viewModel.loading(false);
+
+            viewModel.alert(new JsonErrorAlertViewModel(
+                'ep-alert-red',
+                response.responseJSON,
+                null,
+                function(){},
+            ));
+        }
+    });
+};
+
 
 viewModel.delete = function(functionToDelete){
     if(!functionToDelete.id){
@@ -182,3 +257,17 @@ var graphPageView = new GraphPageView({
     viewModel: viewModel
 });
 
+if (url.searchParams.has('has_updated_published_graph')) {
+    viewModel.alert(new AlertViewModel(
+            'ep-alert-blue',
+            arches.translations.graphDesignerPublishedGraphUpdated.title,
+            arches.translations.graphDesignerPublishedGraphUpdated.text,
+            null,
+            function(){
+                // removes query args without reloading page
+                url.search = '';
+                window.history.replaceState({}, document.title, url.toString());
+            },
+        )
+    );
+}

@@ -86,7 +86,7 @@ class DataTypeFactory(object):
         if DataTypeFactory._datatypes is None:
             DataTypeFactory._datatypes = {
                 datatype.datatype: datatype
-                for datatype in models.DDataType.objects.all()
+                for datatype in models.DDataType.objects.select_related("defaultwidget")
             }
         self.datatypes = DataTypeFactory._datatypes
         self.datatype_instances = DataTypeFactory._datatype_instances
@@ -97,7 +97,7 @@ class DataTypeFactory(object):
         except KeyError:
             DataTypeFactory._datatypes = {
                 datatype.datatype: datatype
-                for datatype in models.DDataType.objects.all()
+                for datatype in models.DDataType.objects.select_related("defaultwidget")
             }
             d_datatype = DataTypeFactory._datatypes[datatype]
             self.datatypes = DataTypeFactory._datatypes
@@ -2042,10 +2042,10 @@ class ResourceInstanceDataType(BaseDataType):
     ):
         errors = []
         if value is not None:
-            resourceXresourceIds = self.get_nodevalues(value)
-            for resourceXresourceId in resourceXresourceIds:
+            relations = self.get_nodevalues(value)
+            for relation in relations:
                 try:
-                    resourceid = resourceXresourceId["resourceId"]
+                    resourceid = relation["resourceId"]
                     uuid.UUID(resourceid)
                     if strict:
                         try:

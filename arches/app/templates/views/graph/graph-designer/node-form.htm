@@ -4,7 +4,10 @@
 <div style="height: 100%;" id="external-page-content">
     <div class="settings-panel">
 
-        <div class="settings-panel-heading">
+        <div 
+            class="settings-panel-heading"
+            data-bind="css: { 'draft-graph': $data.graph.source_identifier_id() }"
+        >
             <div class="graph-designer-title">
                 <div data-bind="text: (node() && node().name()) ? node().name() : {% quoted_trans _('Unnamed node') %}"></div>
                 <span class="graph-crm-class">
@@ -17,6 +20,13 @@
                 </span>
 
             </div>
+
+            <!-- ko if: $data.graph.source_identifier_id() -->
+                <div class="settings-panel-draft-label">
+                    <i class="fa fa-pencil-square-o" style="margin-right: 5px;"></i>
+                    <span>{% trans "DRAFT" %}</span>
+                </div>
+            <!-- /ko -->
         </div>
 
         <!-- Settings Forms -->

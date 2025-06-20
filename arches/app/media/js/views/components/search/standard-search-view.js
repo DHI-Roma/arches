@@ -20,7 +20,8 @@ const viewModel = BaseSearchViewComponent.extend({
         }, this);
         this.selectedTab = ko.observable(firstEnabledFilter.type);
         this.sharedStateObject.selectedTab = this.selectedTab;
-        this.resultsExpanded = ko.observable(true);
+        this.shouldShowSearchFilters = ko.observable(false);
+        this.sharedStateObject.shouldShowSearchFilters = this.shouldShowSearchFilters;
         this.isResourceRelatable = function(graphId) {
             var relatable = false;
             if (this.graph) {

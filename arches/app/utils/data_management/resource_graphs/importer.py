@@ -179,8 +179,7 @@ def import_graph(graphs, overwrite_graphs=True, user=None):
                             # Comparing the entire object against the database
                             # may fail because the incoming json may differ
                             # slightly from the database representation, e.g.
-                            # 'width': '100%' -> 'width': '100%%' in db (escaped)
-                            # or 'placeholder': 'Enter text'
+                            # 'placeholder': 'Enter text'
                             # -> 'placeholder': {'en': 'Enter text'} in db
                             card_id=card_x_node_x_widget["card_id"],
                             node_id=card_x_node_x_widget["node_id"],
@@ -190,14 +189,9 @@ def import_graph(graphs, overwrite_graphs=True, user=None):
 
                 with transaction.atomic():
                     # saves graph publication with serialized graph
-                    graph = Graph.objects.get(
+                    graph = Graph.objects.select_related("ontology").get(
                         pk=graph.graphid, source_identifier_id__isnull=True
                     )  # retrieve graph using the ORM to ensure strings are I18n_Strings
-
-                    try:
-                        Graph.objects.get(source_identifier_id=graph.graphid)
-                    except Graph.DoesNotExist:
-                        graph.create_draft_graph()
 
                     if publication_data:
                         GraphXPublishedGraph.objects.update_or_create(

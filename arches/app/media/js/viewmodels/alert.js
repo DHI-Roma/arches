@@ -1,4 +1,5 @@
 import ko from 'knockout';
+import ariaUtils from 'utils/aria';
 
 /**
 * A viewmodel used for generic alert messages
@@ -36,5 +37,10 @@ var AlertViewModel = function(type, title, text, cancel, ok) {
             cancel();
         };
     }
+
+    ko.tasks.schedule(() => {
+        const focusButton = document.querySelector('#card-alert-panel button:first-of-type');
+        ariaUtils.shiftFocus(focusButton);
+    });
 };
 export default AlertViewModel;

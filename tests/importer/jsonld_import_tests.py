@@ -1,3 +1,4 @@
+import hashlib
 import os
 import datetime
 
@@ -33,7 +34,11 @@ class JsonLDImportTests(ArchesTestCase):
         cls.token = "abc123"
         cls.client = Client(HTTP_AUTHORIZATION="Bearer %s" % cls.token)
 
-        sql_str = CREATE_TOKEN_SQL.format(token=cls.token, user_id=1)
+        sql_str = CREATE_TOKEN_SQL.format(
+            token=cls.token,
+            user_id=1,
+            token_checksum=hashlib.sha256(cls.token.encode("utf-8")).hexdigest(),
+        )
         with connection.cursor() as cursor:
             cursor.execute(sql_str)
 
@@ -1530,7 +1535,13 @@ class JsonLDImportTests(ArchesTestCase):
         )
         tile1_parent = get_tile_by_id(tiles, tile1.parenttile_id)
 
-        self.assertEqual(tile1_parent.data, {})
+        self.assertEqual(
+            tile1_parent.data,
+            {
+                "d155a4c0-1540-11ea-b353-acde48001122": None,
+                "ddc44d9c-1540-11ea-b353-acde48001122": None,
+            },
+        )
         tile1_grandparent = get_tile_by_id(tiles, tile1_parent.parenttile_id)
         self.assertEqual(
             tile1_grandparent.data["02ec0ace-1541-11ea-b353-acde48001122"]["en"],

@@ -105,6 +105,21 @@ ELASTICSEARCH_CUSTOM_INDEXES = []
 #     'should_update_asynchronously': False
 # }]
 
+TERM_SEARCH_TYPES = [
+    {
+        "type": "term",
+        "label": _("Term Matches"),
+        "key": "terms",
+        "module": "arches.app.search.search_term.TermSearch",
+    },
+    {
+        "type": "concept",
+        "label": _("Concepts"),
+        "key": "concepts",
+        "module": "arches.app.search.concept_search.ConceptSearch",
+    },
+]
+
 THUMBNAIL_GENERATOR = None  # "arches.app.utils.thumbnail_generator.ThumbnailGenerator"
 GENERATE_THUMBNAILS_ON_DEMAND = (
     False  # True to generate a thumnail on request if it doens't exist
@@ -358,7 +373,6 @@ AUTHENTICATION_BACKENDS = (
 
 INSTALLED_APPS = (
     "webpack_loader",
-    "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
     "django.contrib.sessions",
@@ -375,11 +389,15 @@ INSTALLED_APPS = (
     "corsheaders",
     "oauth2_provider",
     "django_celery_results",
+    "pgtrigger",
 )
 
 # Placing this last ensures any templates provided by Arches Applications
 # take precedence over core arches templates in arches/app/templates.
-INSTALLED_APPS += ("arches.app",)
+INSTALLED_APPS += (
+    "arches.app",
+    "django.contrib.admin",
+)
 
 MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",

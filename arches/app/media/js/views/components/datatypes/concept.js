@@ -53,7 +53,6 @@ const viewModel = function(params) {
                     'id': null
                 });
                 self.topConcept(self.initialTopConcept);
-                params._node(JSON.stringify(params))  // prevents dirty state trigger on Graph Designer concept node load
             }).fail(function(error){
                 console.log(error);
             });

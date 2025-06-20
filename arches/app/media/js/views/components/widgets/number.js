@@ -1,5 +1,6 @@
 import ko from 'knockout';
 import _ from 'underscore';
+import arches from 'arches';
 import WidgetViewModel from 'viewmodels/widget';
 import numberWidgetTemplate from 'templates/views/components/widgets/number.htm';
 import 'bindings/formattedNumber';
@@ -18,14 +19,14 @@ import 'bindings/formattedNumber';
 
 var NumberWidget = function(params) {
     params.configKeys = ['placeholder', 'width', 'min', 'max', 'step', 'precision', 'prefix', 'suffix', 'defaultValue', 'format', 'uneditable'];
+    this.preview = arches.graphs.length > 0;
 
-        
     WidgetViewModel.apply(this, [params]);
 
     var self = this;
 
     this.disable = ko.computed(() => {
-        return ko.unwrap(self.disabled) || ko.unwrap(self.uneditable); 
+        return ko.unwrap(self.disabled) || ko.unwrap(self.uneditable);
     }, self);
 
     this.updateVal = ko.computed(function(){
@@ -44,10 +45,12 @@ var NumberWidget = function(params) {
             }
 
         }
-        return val || self.value();
+        return val || self.value() || null;
     }, self).extend({throttle: 600});
 
-    this.value(Number(this.updateVal()));
+    if (!this.preview) {
+        this.value(Number(this.updateVal()));
+    }
 
     this.displayValue = ko.pureComputed(function() {
         if (self.value() !== null && self.value() !== undefined) {

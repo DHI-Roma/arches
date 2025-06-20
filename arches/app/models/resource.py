@@ -18,11 +18,12 @@ along with this program. If not, see <http://www.gnu.org/licenses/>.
 
 import datetime
 import logging
+from collections import defaultdict
 from time import time
 from uuid import UUID
 from types import SimpleNamespace
 from django.db import transaction
-from django.db.models import Count, Prefetch, Q
+from django.db.models import Count, F, Prefetch, Q
 from django.contrib.auth.models import User, Group
 from django.forms.models import model_to_dict
 from django.core.exceptions import ObjectDoesNotExist, PermissionDenied
@@ -294,6 +295,11 @@ class Resource(models.ResourceInstance):
                 newvalue=f"{self.resource_instance_lifecycle_state.name} ({self.resource_instance_lifecycle_state.id})",
                 transaction_id=transaction_id,
             )
+            self.run_lifecycle_handlers(
+                current_resource_instance_lifecycle_state,
+                request=request,
+                context=context,
+            )
             self.index(context)
             return
 
@@ -311,6 +317,27 @@ class Resource(models.ResourceInstance):
 
         if index is True:
             self.index(context)
+
+    def run_lifecycle_handlers(
+        self, current_lifecycle_state, request=None, context=None
+    ):
+        for function in [
+            function_x_graph.function.get_class_module()(function_x_graph.config, None)
+            for function_x_graph in models.FunctionXGraph.objects.filter(
+                graph_id=self.graph_id,
+                function__functiontype="lifecyclehandler",
+            ).select_related("function")
+        ]:
+            try:
+                function.on_update_lifecycle_state(
+                    self,
+                    current_state=current_lifecycle_state,
+                    new_state=self.resource_instance_lifecycle_state,
+                    request=request,
+                    context=context,
+                )
+            except NotImplementedError:
+                pass
 
     def load_tiles(self, user=None, perm="read_nodegroup"):
         """
@@ -471,7 +498,13 @@ class Resource(models.ResourceInstance):
             resource_indexed.send(sender=self.__class__, instance=self)
 
     def get_documents_to_index(
-        self, fetchTiles=True, datatype_factory=None, node_datatypes=None, context=None
+        self,
+        fetchTiles=True,
+        datatype_factory=None,
+        node_datatypes=None,
+        context=None,
+        *,
+        all_users=None,
     ):
         """
         Gets all the documents nessesary to index a single resource
@@ -482,6 +515,7 @@ class Resource(models.ResourceInstance):
         datatype_factory -- refernce to the DataTypeFactory instance
         node_datatypes -- a dictionary of datatypes keyed to node ids
         context -- a string such as "copy" to indicate conditions under which a document is indexed
+        all_users -- an iterable of User objects, e.g. User.objects.prefetch_related("groups")
 
         """
 
@@ -494,7 +528,7 @@ class Resource(models.ResourceInstance):
         document["root_ontology_class"] = self.get_root_ontology()
         document["legacyid"] = self.legacyid
         document["resource_instance_lifecycle_state_id"] = str(
-            self.resource_instance_lifecycle_state.pk
+            self.resource_instance_lifecycle_state_id
         )
 
         document["displayname"] = []
@@ -571,7 +605,9 @@ class Resource(models.ResourceInstance):
                 [int(self.principaluser_id)] if self.principaluser_id else []
             )
         }
-        document["permissions"].update(permission_backend.get_index_values(self))
+        document["permissions"].update(
+            permission_backend.get_index_values(self, all_users=all_users)
+        )
 
         document["strings"] = []
         document["dates"] = []
@@ -1005,26 +1041,44 @@ class Resource(models.ResourceInstance):
                     for resource in related_resources["docs"]
                     if resource["found"]
                 ]
-                count_query = (
-                    models.ResourceInstance.objects.filter(pk__in=related_resource_ids)
-                    .annotate(
-                        total_relations=(
-                            Count("from_resxres", distinct=True)
-                            + Count("to_resxres", distinct=True)
+                if include_rr_count:
+                    to_counts = (
+                        models.ResourceXResource.objects.filter(
+                            to_resource__in=related_resource_ids
                         )
+                        .values("to_resource")
+                        .annotate(to_count=Count("to_resource"))
+                        # ORDER BY NULLS LAST is necessary for "pipelined" GROUP BY, see
+                        # https://use-the-index-luke.com/sql/sorting-grouping/indexed-group-by
+                        .order_by(F("to_resource").asc(nulls_last=True))
                     )
-                    .only("pk")
-                )
-                total_relations_by_resource_id = {
-                    obj.pk: obj.total_relations for obj in count_query.iterator()
-                }
+                    from_counts = (
+                        models.ResourceXResource.objects.filter(
+                            from_resource__in=related_resource_ids
+                        )
+                        .values("from_resource")
+                        .annotate(from_count=Count("from_resource"))
+                        .order_by(F("from_resource").asc(nulls_last=True))
+                    )
+
+                    total_relations_by_resource_id: dict[UUID:int] = defaultdict(int)
+                    for related_resource_count in to_counts:
+                        total_relations_by_resource_id[
+                            related_resource_count["to_resource"]
+                        ] += related_resource_count["to_count"]
+                    for related_resource_count in from_counts:
+                        total_relations_by_resource_id[
+                            related_resource_count["from_resource"]
+                        ] += related_resource_count["from_count"]
 
                 for resource in related_resources["docs"]:
                     if resource["found"]:
                         if include_rr_count:
-                            resource["_source"]["total_relations"] = (
-                                total_relations_by_resource_id[UUID(resource["_id"])]
-                            )
+                            resource["_source"]["total_relations"] = {
+                                "value": total_relations_by_resource_id[
+                                    UUID(resource["_id"])
+                                ]
+                            }
                         for descriptor_type in ("displaydescription", "displayname"):
                             descriptor = get_localized_descriptor(
                                 resource, descriptor_type

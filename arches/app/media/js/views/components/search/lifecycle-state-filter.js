@@ -21,6 +21,7 @@ const viewModel = BaseFilter.extend({
         if (response.ok) {
             const data = await response.json();
             data.forEach(function(lifecycleState) {
+                lifecycleState.name = `${lifecycleState.name} (${lifecycleState.resource_instance_lifecycle.name})`;
                 self.lifecycleStates.push(lifecycleState);
             });
         } else {
@@ -34,12 +35,11 @@ const viewModel = BaseFilter.extend({
             this.updateQuery();
         }, this);
 
-        this.filters[componentName](this);
+        this.searchFilterVms[componentName](this);
 
-        if (this.requiredFiltersLoaded() === false) {
-            this.requireFiltersLoadedSubscription = this.requiredFiltersLoaded.subscribe(function() {
+        if (this.searchViewFiltersLoaded() === false) {
+            this.searchViewFiltersLoaded.subscribe(function() {
                 this.restoreState();
-                self.requireFiltersLoadedSubscription.dispose();
             }, this);
         } else {
             this.restoreState();

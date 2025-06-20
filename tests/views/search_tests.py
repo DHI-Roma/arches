@@ -881,8 +881,8 @@ class SearchTests(ArchesTestCase):
         self.assertTrue(searchview_component_instance is not None)
 
         search_components = searchview_component_instance.get_searchview_filters()
-        # 13 available components + search-view component
-        self.assertEqual(len(search_components), 14)
+        # 14 available components + search-view component
+        self.assertEqual(len(search_components), 15)
 
     def test_searchview_searchview_component_from_anonymous(self):
         request = HttpRequest()
@@ -895,8 +895,8 @@ class SearchTests(ArchesTestCase):
         self.assertTrue(searchview_component_instance is not None)
 
         search_components = searchview_component_instance.get_searchview_filters()
-        # 13 available components + search-view component
-        self.assertEqual(len(search_components), 14)
+        # 14 available components + search-view component
+        self.assertEqual(len(search_components), 15)
 
     def test_search_bad_json(self):
         request = HttpRequest()
@@ -1029,7 +1029,9 @@ class TestEsMappingModifier(EsMappingModifier):
         return new_must_element
 
     @staticmethod
-    def add_search_filter(search_query, term):
+    def add_search_filter(
+        search_query, term, permitted_nodegroups, include_provisional
+    ):
         original_must_filter = search_query.dsl["bool"]["must"]
         search_query.dsl["bool"]["must"] = []
         for must_element in original_must_filter:

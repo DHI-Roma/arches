@@ -36,6 +36,7 @@ from django.utils import translation
 
 from arches.app.models import models
 from arches.app.models.card import Card
+from arches.app.models.graph import Graph
 from arches.app.models.tile import Tile
 from arches.app.models.resource import Resource
 from arches.app.models.system_settings import settings
@@ -199,6 +200,19 @@ class ResourceEditorView(MapBaseManagerView):
                 "user_can_edit_instance_permissions"
             ]
 
+        serialized_graph = None
+        if graph.publication:
+            try:
+                published_graph = graph.get_published_graph()
+            except models.PublishedGraph.DoesNotExist:
+                LanguageSynchronizer.synchronize_settings_with_db()
+                published_graph = graph.get_published_graph()
+
+            serialized_graph = published_graph.serialized_graph
+
+        # TODO: Remove this when graph changes automatically sync to published graphs
+        graph = Graph(serialized_graph)
+
         ontologyclass = None
         nodegroups = []
         editable_nodegroups = []
@@ -280,16 +294,6 @@ class ResourceEditorView(MapBaseManagerView):
             tiles = provisionaltiles
             for tile in tiles:
                 prepare_tiledata(tile, nodes)
-
-        serialized_graph = None
-        if graph.publication:
-            try:
-                published_graph = graph.get_published_graph()
-            except models.PublishedGraph.DoesNotExist:
-                LanguageSynchronizer.synchronize_settings_with_db()
-                published_graph = graph.get_published_graph()
-
-            serialized_graph = published_graph.serialized_graph
 
         if serialized_graph:
             serialized_cards = serialized_graph["cards"]
@@ -397,9 +401,8 @@ class ResourceEditorView(MapBaseManagerView):
                 "templates": ["resource-editor-help"],
             }
 
-        if graph.has_unpublished_changes or (
-            resource_instance
-            and resource_instance.graph_publication_id != graph.publication_id
+        if resource_instance and str(resource_instance.graph_publication_id) != str(
+            graph.publication_id
         ):
             return redirect("resource_report", resourceid=resourceid)
         else:
@@ -499,7 +502,7 @@ class ResourcePermissionDataView(View):
                     user_is_resource_editor(user) or user_is_resource_reviewer(user)
                 ),
             }
-            for user in User.objects.all()
+            for user in User.objects.prefetch_related("groups")
         ]
         identities += [
             {
@@ -845,19 +848,27 @@ class ResourceTiles(View):
         search_term = request.GET.get("term", None)
         permitted_tiles = []
         perm = "read_nodegroup"
-        tiles = models.TileModel.objects.filter(resourceinstance_id=resourceid)
+        tiles = Tile.objects.filter(
+            resourceinstance_id=resourceid,
+            # Get tiles only from the latest graph publication.
+            resourceinstance__graph_publication=models.F(
+                "resourceinstance__graph__publication"
+            ),
+        )
         if nodeid is not None:
-            node = models.Node.objects.get(pk=nodeid)
-            tiles = tiles.filter(nodegroup_id=node.nodegroup_id)
+            tiles = tiles.filter(nodegroup__node=nodeid)
+        if include_display_values:
+            tiles = tiles.select_related("nodegroup").prefetch_related(
+                "nodegroup__node_set"
+            )
 
         for tile in tiles:
             if request.user.has_perm(perm, tile.nodegroup):
-                tile = Tile.objects.get(pk=tile.tileid)
                 tile.filter_by_perm(request.user, perm)
                 tile_dict = model_to_dict(tile)
                 if include_display_values:
                     tile_dict["display_values"] = []
-                    for node in models.Node.objects.filter(nodegroup=tile.nodegroup):
+                    for node in tile.nodegroup.node_set.all():
                         if str(node.nodeid) in tile.data:
                             datatype = datatype_factory.get_instance(node.datatype)
                             display_value = datatype.get_display_value(tile, node)
@@ -1005,13 +1016,6 @@ class ResourceReportView(MapBaseManagerView):
 @method_decorator(can_read_resource_instance, name="dispatch")
 class RelatedResourcesView(BaseManagerView):
     action = None
-    graphs = (
-        models.GraphModel.objects.all()
-        .exclude(pk=settings.SYSTEM_SETTINGS_RESOURCE_MODEL_ID)
-        .exclude(isresource=False)
-        .exclude(is_active=False)
-        .exclude(source_identifier__isnull=False)
-    )
 
     def paginate_related_resources(self, related_resources, page, request):
         total = related_resources["total"]["value"]
@@ -1051,7 +1055,7 @@ class RelatedResourcesView(BaseManagerView):
 
         return ret
 
-    def get(self, request, resourceid=None, include_rr_count=True):
+    def get(self, request, resourceid=None, include_rr_count=True, graphs=None):
         ret = {}
 
         if self.action == "get_candidates":
@@ -1097,7 +1101,7 @@ class RelatedResourcesView(BaseManagerView):
                     page=page,
                     user=request.user,
                     resourceinstance_graphid=resourceinstance_graphid,
-                    graphs=self.graphs,
+                    graphs=graphs,
                     include_rr_count=include_rr_count,
                 )
 
@@ -1109,7 +1113,7 @@ class RelatedResourcesView(BaseManagerView):
                     lang=lang,
                     user=request.user,
                     resourceinstance_graphid=resourceinstance_graphid,
-                    graphs=self.graphs,
+                    graphs=graphs,
                     include_rr_count=include_rr_count,
                 )
 
