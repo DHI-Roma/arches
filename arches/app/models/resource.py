@@ -433,7 +433,12 @@ class Resource(models.ResourceInstance):
                 se.index_data("terms", body=term["_source"], id=term["_id"])
 
             if len(settings.ELASTICSEARCH_CUSTOM_INDEXES) > 0:
-                celery_worker_running = task_management.check_if_celery_available()
+                celery_worker_running = False
+                if any(
+                    index.get("should_update_asynchronously")
+                    for index in settings.ELASTICSEARCH_CUSTOM_INDEXES
+                ):
+                    celery_worker_running = task_management.check_if_celery_available()
 
                 for index in settings.ELASTICSEARCH_CUSTOM_INDEXES:
                     if celery_worker_running and index.get(
