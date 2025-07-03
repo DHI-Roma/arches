@@ -23,6 +23,7 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Framework :: Django",
     "Framework :: Django :: 5.2",
 ]
@@ -59,7 +60,7 @@ dependencies = [
     "python-slugify==7.0.0",
     "pytz==2023.3",
     "qrcode>=7.3.1",
-    "rdflib==4.2.2",
+    "rdflib==7.1.4",
     "requests-oauthlib==2.0.0",
     "requests[security]>=2.32.3",
     "semantic-version==2.10.0",
