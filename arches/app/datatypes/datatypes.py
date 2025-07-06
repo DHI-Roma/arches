@@ -2186,7 +2186,8 @@ class ResourceInstanceDataType(BaseDataType):
         relationships = tile.data[nodeid]
         if relationships:
             for relationship in relationships:
-                relationship["resourceXresourceId"] = str(uuid.uuid4())
+                if not relationship.get("resourceXresourceId", ""):
+                    relationship["resourceXresourceId"] = str(uuid.uuid4())
                 if not relationship.get("resourceName", ""):
                     relationship["resourceName"] = Resource.objects.get(
                         pk=relationship["resourceId"]
