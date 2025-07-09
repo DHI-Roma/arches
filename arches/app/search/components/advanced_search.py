@@ -46,8 +46,12 @@ class AdvancedSearch(BaseSearchFilter):
                         except:
                             pass
 
-                        if ("op" in val.get("op") in ["null", "not_null"]) or (
-                            "val" in val.get("val") in ["null", "not_null"]
+                        if (
+                            "op" in val
+                            and (val["op"] == "null" or val["op"] == "not_null")
+                        ) or (
+                            "val" in val
+                            and (val["val"] == "null" or val["val"] == "not_null")
                         ):
                             # don't use a nested query with the null/not null search
                             datatype.append_search_filters(
