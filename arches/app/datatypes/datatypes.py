@@ -2472,7 +2472,9 @@ class ResourceInstanceDataType(BaseDataType):
 
     def append_in_list_search_filters(self, value, node, query):
         values_list = value.get("val", [])
-        if values_list:
+        if isinstance(values_list, str):
+            values_list = [values_list]
+        if len(values_list):
             field_name = f"tiles.data.{node.pk}"
             for val in values_list:
                 match_q = Term(
@@ -2489,16 +2491,18 @@ class ResourceInstanceDataType(BaseDataType):
                         query.must_not(match_q)
                     case "~":
                         query.must(
-                            Match(
-                                field=f"tiles.data.{node.pk}.resourceName.ngram",
-                                query=val,
+                            Wildcard(
+                                field=f"tiles.data.{node.pk}.resourceName.keyword",
+                                query=f"*{val}*",
+                                case_insensitive=True,
                             )
                         )
                     case "!~":
                         query.must_not(
-                            Match(
-                                field=f"tiles.data.{node.pk}.resourceName.ngram",
-                                query=val,
+                            Wildcard(
+                                field=f"tiles.data.{node.pk}.resourceName.keyword",
+                                query=f"*{val}*",
+                                case_insensitive=True,
                             )
                         )
             query.filter(Exists(field=field_name))
@@ -2602,8 +2606,8 @@ class ResourceInstanceDataType(BaseDataType):
                 "resourceName": {
                     "type": "text",
                     "fields": {
-                        "keyword": {"ignore_above": 256, "type": "keyword"},
-                        "ngram": {"type": "text", "analyzer": "ngram_analyzer"},
+                        "keyword": {"ignore_above": 512, "type": "keyword"},
+                        # "ngram": {"type": "text", "analyzer": "ngram_analyzer"},
                     },
                 },
                 "ontologyProperty": {
