@@ -501,6 +501,8 @@ class ImportSingleCsv(BaseImportModule):
                                     )
 
                                 valid = True if len(errors) == 0 else False
+                                if valid and value is None:
+                                    continue
                                 error_message = ""
                                 for error in errors:
                                     error_message = (

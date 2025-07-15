@@ -2498,7 +2498,7 @@ class ResourceInstanceDataType(BaseDataType):
             logger.warning(
                 f"ResourceInstanceDataType: no resources found for {converted_value}"
             )
-            # return
+            return
         return transformed_value
 
     def transform_export_values(self, value, *args, **kwargs):
