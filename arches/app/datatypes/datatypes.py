@@ -2163,7 +2163,7 @@ class ResourceInstanceDataType(BaseDataType):
                         value, source, row_number, message, title
                     )
                     errors.append(error_message)
-        else:
+        elif strict is True:
             title = _("Invalid Resource Instance Datatype Value")
             message = _(
                 "Invalid Value. Check that the value actually exists if it was a legacyid or uuid."

@@ -466,6 +466,7 @@ class ImportSingleCsv(BaseImportModule):
                             config["nodeid"] = node
                             config["path"] = temp_dir
                             config["resourceid"] = resourceid
+                            # config["strict"] = True
 
                             if source_value:
                                 if datatype == "string":
