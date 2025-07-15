@@ -2439,7 +2439,19 @@ class ResourceInstanceDataType(BaseDataType):
                     index=RESOURCES_INDEX, id=[str(val) for val in converted_value]
                 )
                 for hit in results["docs"]:
-                    transformed_value.append(build_resource_instance_object(hit))
+                    if from_resourceid:
+                        resource_x_resource_exists = (
+                            models.ResourceXResource.objects.filter(
+                                resourceinstanceidto_id=hit["_id"],
+                                resourceinstanceidfrom_id=from_resourceid,
+                            ).exists()
+                        )
+                        if not resource_x_resource_exists:
+                            transformed_value.append(
+                                build_resource_instance_object(hit)
+                            )
+                    else:
+                        transformed_value.append(build_resource_instance_object(hit))
 
             case "dict":  # assume data correctly parsed via ast.literal
                 for val in converted_value:
@@ -2447,7 +2459,17 @@ class ResourceInstanceDataType(BaseDataType):
                         uuid.UUID(val["resourceId"])
                     except:
                         continue
-                    transformed_value.append(val)
+                    if from_resourceid:
+                        resource_x_resource_exists = (
+                            models.ResourceXResource.objects.filter(
+                                resourceinstanceidto_id=val["resourceId"],
+                                resourceinstanceidfrom_id=from_resourceid,
+                            ).exists()
+                        )
+                        if not resource_x_resource_exists:
+                            transformed_value.append(val)
+                    else:
+                        transformed_value.append(val)
             case _:  # default case (handles str/legacyid and any other types)
                 if value_type != "str":
                     converted_value = [str(val) for val in converted_value]
@@ -2458,13 +2480,25 @@ class ResourceInstanceDataType(BaseDataType):
                 results = query.search(index=RESOURCES_INDEX)
                 # print(f"{len(results['hits']['hits'])} hits")
                 for hit in results["hits"]["hits"]:
-                    transformed_value.append(build_resource_instance_object(hit))
+                    if from_resourceid:
+                        resource_x_resource_exists = (
+                            models.ResourceXResource.objects.filter(
+                                resourceinstanceidto_id=hit["_id"],
+                                resourceinstanceidfrom_id=from_resourceid,
+                            ).exists()
+                        )
+                        if not resource_x_resource_exists:
+                            transformed_value.append(
+                                build_resource_instance_object(hit)
+                            )
+                    else:
+                        transformed_value.append(build_resource_instance_object(hit))
 
         if len(transformed_value) == 0:
             logger.warning(
                 f"ResourceInstanceDataType: no resources found for {converted_value}"
             )
-            return
+            # return
         return transformed_value
 
     def transform_export_values(self, value, *args, **kwargs):

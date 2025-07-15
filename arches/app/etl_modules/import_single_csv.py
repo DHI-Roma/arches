@@ -494,7 +494,10 @@ class ImportSingleCsv(BaseImportModule):
                                     )
                                 else:
                                     value, errors = self.prepare_data_for_loading(
-                                        datatype_instance, source_value, config
+                                        datatype_instance,
+                                        source_value,
+                                        config,
+                                        resourceid=resourceid,
                                     )
 
                                 valid = True if len(errors) == 0 else False

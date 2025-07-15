@@ -126,10 +126,14 @@ class BaseImportModule:
             rows = cursor.fetchall()
         return rows
 
-    def prepare_data_for_loading(self, datatype_instance, source_value, config):
+    def prepare_data_for_loading(
+        self, datatype_instance, source_value, config, resourceid=None
+    ):
         try:
             value = (
-                datatype_instance.transform_value_for_tile(source_value, **config)
+                datatype_instance.transform_value_for_tile(
+                    source_value, **config, resourceid=resourceid
+                )
                 if source_value
                 else None
             )
