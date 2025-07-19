@@ -2439,6 +2439,10 @@ class ResourceInstanceDataType(BaseDataType):
                 results = query.search(
                     index=RESOURCES_INDEX, id=[str(val) for val in converted_value]
                 )
+                if not len(results["docs"]):
+                    logger.warning(
+                        f"ResourceInstanceDataType: [uuid case] no hits in Terms query for {converted_value}"
+                    )
                 for hit in results["docs"]:
                     if from_resourceid:
                         resource_x_resource_exists = (
@@ -2503,6 +2507,10 @@ class ResourceInstanceDataType(BaseDataType):
                 )  # exact match on keyword
                 query.add_query(boolquery)
                 results = query.search(index=RESOURCES_INDEX)
+                if not len(results["hits"]["hits"]):
+                    logger.warning(
+                        f"ResourceInstanceDataType: [default case] no hits in Terms query for {converted_value} (datatype: {value_type})"
+                    )
                 # print(f"{len(results['hits']['hits'])} hits")
                 for hit in results["hits"]["hits"]:
                     if from_resourceid:
