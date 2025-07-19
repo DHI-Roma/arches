@@ -2459,6 +2459,10 @@ class ResourceInstanceDataType(BaseDataType):
                             transformed_value.append(
                                 build_resource_instance_object(hit)
                             )
+                        else:
+                            logger.warning(
+                                f"ResourceInstanceDataType: resource {hit['_id']} already exists in ResourceXResource (nodeid: {nodeid}, from_resourceid: {from_resourceid})"
+                            )
                     else:
                         transformed_value.append(build_resource_instance_object(hit))
 
@@ -2485,6 +2489,10 @@ class ResourceInstanceDataType(BaseDataType):
                         )
                         if not resource_x_resource_exists:
                             transformed_value.append(val)
+                        else:
+                            logger.warning(
+                                f"ResourceInstanceDataType: resource {val['resourceId']} already exists in ResourceXResource (nodeid: {nodeid}, from_resourceid: {from_resourceid})"
+                            )
                     else:
                         transformed_value.append(val)
             case _:  # default case (handles str/legacyid and any other types)
@@ -2515,6 +2523,10 @@ class ResourceInstanceDataType(BaseDataType):
                         if not resource_x_resource_exists:
                             transformed_value.append(
                                 build_resource_instance_object(hit)
+                            )
+                        else:
+                            logger.warning(
+                                f"ResourceInstanceDataType: resource {hit['_id']} already exists in ResourceXResource (nodeid: {nodeid}, from_resourceid: {from_resourceid})"
                             )
                     else:
                         transformed_value.append(build_resource_instance_object(hit))
