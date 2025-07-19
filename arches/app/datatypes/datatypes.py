@@ -2424,7 +2424,17 @@ class ResourceInstanceDataType(BaseDataType):
         if not isinstance(converted_value, list):
             converted_value = [converted_value]
         for value_subtype_label, value_subtype_class in list(subtypes_dict.items()):
-            if isinstance(converted_value[0], value_subtype_class):
+            if value_subtype_label == "uuid":
+                try:
+                    converted_value = [
+                        value_subtype_class(val) for val in converted_value
+                    ]
+                    value_type = value_subtype_label
+                except ValueError:
+                    continue
+            elif isinstance(
+                converted_value[0], value_subtype_class
+            ):  # this doesn't seem to work for uuid
                 value_type = value_subtype_label
                 break
 
