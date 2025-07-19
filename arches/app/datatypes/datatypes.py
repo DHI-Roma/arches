@@ -2355,6 +2355,7 @@ class ResourceInstanceDataType(BaseDataType):
 
         relatable_graphs = kwargs.get("graphs", [])
         from_resourceid = kwargs.get("resourceid", None)
+        nodeid = kwargs.get("nodeid", None)
         default_values_lookup = dict()
         for graph in relatable_graphs:
             if graph.get("useOntologyRelationship", False) or not graph.get(
@@ -2444,7 +2445,15 @@ class ResourceInstanceDataType(BaseDataType):
                             models.ResourceXResource.objects.filter(
                                 resourceinstanceidto_id=hit["_id"],
                                 resourceinstanceidfrom_id=from_resourceid,
+                                nodeid_id=nodeid,
                             ).exists()
+                            if nodeid
+                            else (
+                                models.ResourceXResource.objects.filter(
+                                    resourceinstanceidto_id=hit["_id"],
+                                    resourceinstanceidfrom_id=from_resourceid,
+                                ).exists()
+                            )
                         )
                         if not resource_x_resource_exists:
                             transformed_value.append(
@@ -2464,7 +2473,15 @@ class ResourceInstanceDataType(BaseDataType):
                             models.ResourceXResource.objects.filter(
                                 resourceinstanceidto_id=val["resourceId"],
                                 resourceinstanceidfrom_id=from_resourceid,
+                                nodeid_id=nodeid,
                             ).exists()
+                            if nodeid
+                            else (
+                                models.ResourceXResource.objects.filter(
+                                    resourceinstanceidto_id=val["resourceId"],
+                                    resourceinstanceidfrom_id=from_resourceid,
+                                ).exists()
+                            )
                         )
                         if not resource_x_resource_exists:
                             transformed_value.append(val)
@@ -2485,7 +2502,15 @@ class ResourceInstanceDataType(BaseDataType):
                             models.ResourceXResource.objects.filter(
                                 resourceinstanceidto_id=hit["_id"],
                                 resourceinstanceidfrom_id=from_resourceid,
+                                nodeid_id=nodeid,
                             ).exists()
+                            if nodeid
+                            else (
+                                models.ResourceXResource.objects.filter(
+                                    resourceinstanceidto_id=hit["_id"],
+                                    resourceinstanceidfrom_id=from_resourceid,
+                                ).exists()
+                            )
                         )
                         if not resource_x_resource_exists:
                             transformed_value.append(
