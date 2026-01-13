@@ -37,6 +37,7 @@ from arches.app.utils.betterJSONSerializer import JSONSerializer, JSONDeserializ
 # these tests can be run from the command line via
 # python manage.py test tests.views.api.test_tiles --settings="tests.test_settings"
 
+
 class ResourceAPITests(ArchesTestCase):
     graph_fixtures = ["Data_Type_Model"]
     data_type_graphid = "330802c5-95bd-11e8-b7ac-acde48001122"
@@ -59,23 +60,23 @@ class ResourceAPITests(ArchesTestCase):
         )
 
     def test_node_value_endpoint(self):
-            user = User.objects.get(username="ben")
-            self.client.force_login(user)
-            tile = models.TileModel.objects.filter(
-                resourceinstance_id=self.non_legacy_resource_instanceid
-            ).first()
-            nodeid = "f08a3057-95c4-11e8-9761-acde48001122"
-            payload = {
-                "tileid": (None, str(tile.tileid)),
-                "nodeid": (None, nodeid),
-                "data": (None, 42),
-                "operation": (None, "create"),
-            }
-            response = self.client.post(
-                reverse("api_node_value"),
-                payload,
-            )
-            self.assertEqual(response.status_code, 200)
+        user = User.objects.get(username="ben")
+        self.client.force_login(user)
+        tile = models.TileModel.objects.filter(
+            resourceinstance_id=self.non_legacy_resource_instanceid
+        ).first()
+        nodeid = "f08a3057-95c4-11e8-9761-acde48001122"
+        payload = {
+            "tileid": (None, str(tile.tileid)),
+            "nodeid": (None, nodeid),
+            "data": (None, 42),
+            "operation": (None, "create"),
+        }
+        response = self.client.post(
+            reverse("api_node_value"),
+            payload,
+        )
+        self.assertEqual(response.status_code, 200)
 
     def test_tiles_endpoint(self):
         user = User.objects.get(username="ben")
