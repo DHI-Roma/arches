@@ -1,7 +1,6 @@
 from datetime import datetime
 import json
 import os
-from pathlib import Path
 import uuid
 from tempfile import NamedTemporaryFile
 
@@ -95,12 +94,7 @@ class BranchExcelImporter(BaseImportModule):
                 source_value = row_details[key]
                 config = node_details["config"]
 
-                if source_value and os.sep in source_value:
-                    config["path"] = Path(source_value).parent
-                else:
-                    config["path"] = (
-                        Path(settings.UPLOADED_FILES_DIR) / "tmp" / self.loadid
-                    )
+                config["bulk_import"] = True
 
                 config["loadid"] = self.loadid
                 try:
@@ -196,7 +190,7 @@ class BranchExcelImporter(BaseImportModule):
                                 "update"  # db will "insert" if tileid does not exist
                             )
                         elif nodegroup_cardinality == "1":
-                            if TileModel.objects.filter(pk=cell_values[1]).exists():
+                            if TileModel.objects.filter(pk=user_tileid).exists():
                                 operation = "update"
 
                     nodegroup_depth = nodegroup_lookup[row_details["nodegroup_id"]][
