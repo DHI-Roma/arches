@@ -476,6 +476,65 @@ class Resources(APIBase):
         return JSONResponse(status=200)
 
 
+@method_decorator(csrf_exempt, name="dispatch")
+class ResourceIdentifiers(APIBase):
+    def get(self, request, resourceid):
+        try:
+            resource_instance = models.ResourceInstance.objects.get(pk=resourceid)
+        except Exception:
+            return JSONErrorResponse(_("Resource instance not found"), status=404)
+
+        if not user_can_read_resource(user=request.user, resource=resource_instance):
+            return JSONErrorResponse(
+                _("Request Failed"), _("Permission Denied"), status=403
+            )
+
+        resource_identifiers = models.ResourceIdentifier.objects.filter(
+            resourceid=resource_instance
+        ).order_by("id")
+
+        return JSONResponse(resource_identifiers)
+
+    def post(self, request, resourceid):
+        try:
+            resource_instance = models.ResourceInstance.objects.get(pk=resourceid)
+        except Exception:
+            return JSONErrorResponse(_("Resource instance not found"), status=404)
+
+        if not user_can_edit_resource(user=request.user, resource=resource_instance):
+            return JSONErrorResponse(
+                _("Request Failed"), _("Permission Denied"), status=403
+            )
+
+        try:
+            payload = JSONDeserializer().deserialize(request.body)
+        except Exception:
+            return JSONErrorResponse(_("Invalid JSON payload"), status=400)
+
+        if payload.get("id"):
+            try:
+                resource_identifier = models.ResourceIdentifier.objects.get(
+                    pk=payload["id"],
+                    resourceid=resource_instance,
+                )
+            except Exception:
+                return JSONErrorResponse(_("Resource identifier not found"), status=404)
+        else:
+            resource_identifier = models.ResourceIdentifier(
+                resourceid=resource_instance
+            )
+
+        resource_identifier.identifier = payload["identifier"]
+        resource_identifier.source = payload["source"]
+
+        if "identifier_type" in payload:
+            resource_identifier.identifier_type = payload["identifier_type"]
+
+        resource_identifier.save()
+
+        return JSONResponse(resource_identifier)
+
+
 class ResourceInstanceLifecycleStates(APIBase):
     def get(self, request):
         def replace_resource_instance_lifecycle_id_with_resource_instance_lifecycle(
