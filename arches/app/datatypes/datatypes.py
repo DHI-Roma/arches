@@ -517,6 +517,13 @@ class NumberDataType(BaseDataType):
                 "provisional": provisional,
             }
         )
+        document["strings"].append(
+            {
+                "string": str(nodevalue),
+                "nodegroup_id": tile.nodegroup_id,
+                "provisional": provisional,
+            }
+        )
 
     def append_search_filters(self, value, node, query, request):
         try:
@@ -565,6 +572,13 @@ class NumberDataType(BaseDataType):
     def default_es_mapping(self):
         mapping = {"type": "double"}
         return mapping
+
+    def get_search_terms(self, nodevalue, nodeid=None):
+        terms = []
+        if nodevalue:
+            terms.append(SearchTerm(value=nodevalue))
+
+        return terms
 
 
 class BooleanDataType(BaseDataType):
