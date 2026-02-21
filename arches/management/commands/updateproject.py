@@ -18,7 +18,7 @@ class Command(BaseCommand):  # pragma: no cover
 
     def handle(self, *args, **options):
         answer = input(
-            "This operation will upgrade your project to version 8.0\n"
+            "This operation will upgrade your project to version 8.2\n"
             "This will replace the following files in your project:\n"
             "  - <project>/apps.py\n"
             "  - .github/actions/build-and-test-branch/action.yml\n"
@@ -37,8 +37,30 @@ class Command(BaseCommand):  # pragma: no cover
         if answer.lower() in ["y", "yes"]:
             self.update_to_v8()
             self.update_to_v8_1()
+            self.update_to_v8_2()
         else:
             self.stdout.write("Operation aborted.")
+
+    def update_to_v8_2(self):
+        self.stdout.write("Updating project to version 8.2...")
+
+        # Updates webpack config files
+        if os.path.isdir(os.path.join(settings.APP_ROOT, "..", "webpack")):
+            self.stdout.write("Removing previous webpack directory...")
+            shutil.rmtree(
+                os.path.join(settings.APP_ROOT, "..", "webpack"), ignore_errors=True
+            )
+            self.stdout.write("Done!")
+
+        self.stdout.write("Creating updated webpack directory at project root...")
+        shutil.copytree(
+            os.path.join(settings.ROOT_DIR, "install", "arches-templates", "webpack"),
+            os.path.join(settings.APP_ROOT, "..", "webpack"),
+        )
+
+        self.stdout.write("Done!")
+
+        self.stdout.write("Project successfully updated to version 8.2")
 
     def update_to_v8_1(self):
         self.stdout.write("Updating project to version 8.1...")
