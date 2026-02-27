@@ -79,30 +79,33 @@ class TermSearch(object):
         query.add_aggregation(base_agg)
 
         ret = []
+        nodegroup_ids = set()
         results = query.search(index=term_search_type["key"])
         if results is not None:
-            for index, result in enumerate(
-                results["aggregations"]["value_agg"]["buckets"]
-            ):
-                ret.append(
-                    {
-                        "type": "term",
-                        "context": "",
-                        "context_label": get_resource_model_label(result),
-                        "id": f'{term_search_type["key"]}{index}',
-                        "text": result["key"],
-                        "value": result["key"],
-                        "nodegroupid": result["nodegroupid"]["buckets"][0]["key"],
-                    }
-                )
+            for result in results["aggregations"]["value_agg"]["buckets"]:
+                for nodegroup in result["nodegroupid"]["buckets"]:
+                    nodegroup_ids.add(nodegroup["key"])
+
+        nodes = Node.objects.filter(nodeid__in=nodegroup_ids).select_related("graph")
+        node_lookup = {str(node.nodeid): (node.graph.name, node.name) for node in nodes}
+
+        i = 0
+        if results is not None:
+            for result in results["aggregations"]["value_agg"]["buckets"]:
+                for nodegroup in result["nodegroupid"]["buckets"]:
+                    nodegroup_id = nodegroup["key"]
+                    graph_name, node_name = node_lookup.get(str(nodegroup_id), ("", ""))
+                    context_label = f"{graph_name} - {node_name}"
+                    ret.append(
+                        {
+                            "type": "term",
+                            "context": "",
+                            "context_label": context_label,
+                            "id": f'{term_search_type["key"]}{i}',
+                            "text": result["key"],
+                            "value": result["key"],
+                            "nodegroupid": nodegroup_id,
+                        }
+                    )
+                    i += 1
         return ret
-
-
-def get_resource_model_label(result):
-    if len(result["nodegroupid"]["buckets"]) > 0:
-        nodegroup = result["nodegroupid"]["buckets"][0]
-        nodegroup_id = nodegroup["key"]
-        node = Node.objects.select_related("graph").get(nodeid=nodegroup_id)
-        graph = node.graph
-        return f"{graph.name} - {node.name}"
-    return ""

@@ -124,13 +124,14 @@ class ArchesProjectCommand(TemplateCommand):
         options["project_name_title_case"] = project_name.title().replace("_", "")
         options["project_name_kebab_case"] = project_name.replace("_", "-")
 
-        if options["project_name_kebab_case"] != project_name and not target:
+        if options["project_name_kebab_case"] != project_name:
             self.stdout.write(
                 self.style.NOTICE(
                     f"Renamed the directory from {project_name} to {options['project_name_kebab_case']}. "
                     "If this is not desired, use the --directory option to create "
                     "a directory with the name you want. Consider using a name "
                     "distinct from your project name."
+                    "For more information, see https://github.com/archesproject/arches/issues/12028"
                 )
             )
 
