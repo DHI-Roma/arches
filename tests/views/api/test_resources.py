@@ -55,7 +55,10 @@ class ResourceAPITests(ArchesTestCase):
         )
         models.TileModel.objects.create(
             nodegroup_id=uuid.UUID("e7364d1e-95c4-11e8-9e7c-acde48001122"),
-            data={"f08a3057-95c4-11e8-9761-acde48001122": 55},
+            data={
+                "e7364d1e-95c4-11e8-9e7c-acde48001122": None,
+                "f08a3057-95c4-11e8-9761-acde48001122": 55,
+            },
             resourceinstance=cls.non_legacy_resource,
         )
 
@@ -558,6 +561,10 @@ class ResourceAPITests(ArchesTestCase):
         self.assertIsNone(result["cards"][0]["sortorder"])
 
     def test_resource_report_api(self):
+        """
+        Ensure api_resource_report returns proper response
+
+        """
         self.client.login(username="admin", password="admin")
         response = self.client.get(
             reverse(
@@ -565,7 +572,12 @@ class ResourceAPITests(ArchesTestCase):
                 args=(str(self.test_prj_user.pk),),
             ),
         )
-        self.assertEqual(response.status_code, 200)
+
+        with self.subTest(response):
+            self.assertEqual(response.status_code, 200)
+
+        with self.subTest(response):
+            self.assertTrue(len(response.json()["cardwidgets"]) > 0)
 
     def test_related_resources_in_resource_report_api(self):
         self.client.login(username="admin", password="admin")
@@ -616,6 +628,292 @@ class ResourceAPITests(ArchesTestCase):
         self.assertTrue(
             response.json()[str(self.non_legacy_resource_instanceid)] is not None
         )
+
+    def test_tiles_endpoint_get(self):
+        user = User.objects.get(username="ben")
+        self.client.force_login(user)
+        tile = models.TileModel.objects.filter(
+            resourceinstance_id=self.non_legacy_resource_instanceid
+        ).first()
+        response = self.client.get(
+            reverse("api_tiles", kwargs={"tileid": str(tile.tileid)})
+        )
+        self.assertEqual(response.status_code, 200)
+
+    def test_tiles_endpoint_post(self):
+        user = User.objects.get(username="admin")
+        self.client.force_login(user)
+        nodegroupid = "e7364d1e-95c4-11e8-9e7c-acde48001122"
+        nodeid = "f08a3057-95c4-11e8-9761-acde48001122"
+        resourceid = "a6421f96-0eba-11f1-87e3-469c1cc4c080"
+        tileid = "97310030-0eba-11f1-87e3-469c1cc4c080"
+        values = json.dumps(
+            {
+                "tileid": "",
+                "data": {
+                    nodegroupid: None,
+                    nodeid: 55.1,
+                },
+                "nodegroup_id": nodegroupid,
+                "parenttile_id": None,
+                "resourceinstance_id": resourceid,
+                "sortorder": 0,
+                "transaction_id": None,
+            }
+        )
+        payload = {
+            "data": values,
+        }
+
+        with self.subTest("resource does not exist before post"):
+            self.assertFalse(
+                models.ResourceInstance.objects.filter(pk=resourceid).exists()
+            )
+
+        self.client.post(
+            reverse("api_tiles", kwargs={"tileid": tileid}),
+            payload,
+        )
+
+        with self.subTest("resource is created after first post"):
+            self.assertTrue(
+                models.ResourceInstance.objects.filter(pk=resourceid).exists()
+            )
+
+        new_tileid = str(
+            models.ResourceInstance.objects.get(pk=resourceid).tilemodel_set.first().pk
+        )
+        values = json.dumps(
+            {
+                "tileid": new_tileid,
+                "data": {
+                    "e7364d1e-95c4-11e8-9e7c-acde48001122": None,
+                    "f08a3057-95c4-11e8-9761-acde48001122": 75,
+                },
+                "nodegroup_id": nodegroupid,
+                "parenttile_id": None,
+                "resourceinstance_id": resourceid,
+                "sortorder": 0,
+                "transaction_id": None,
+            }
+        )
+        payload = {
+            "data": values,
+        }
+
+        self.client.post(
+            reverse("api_tiles", kwargs={"tileid": new_tileid}),
+            payload,
+        )
+
+        with self.subTest("first related tile has expected nodeid value"):
+            self.assertEqual(
+                models.ResourceInstance.objects.get(pk=resourceid)
+                .tilemodel_set.first()
+                .data[nodeid],
+                75,
+            )
+
+    def test_tiles_endpoint_request_body(self):
+        user = User.objects.get(username="admin")
+        self.client.force_login(user)
+        nodegroupid = "e7364d1e-95c4-11e8-9e7c-acde48001122"
+        nodeid = "f08a3057-95c4-11e8-9761-acde48001122"
+        resourceid = "c11d5814-1746-11f1-bb2a-469c1cc4c080"
+        tileid = "869aaa14-1752-11f1-bb2a-469c1cc4c080"
+        values = json.dumps(
+            {
+                "tileid": "",
+                "data": {
+                    nodegroupid: None,
+                    nodeid: 55.1,
+                },
+                "nodegroup_id": nodegroupid,
+                "parenttile_id": None,
+                "resourceinstance_id": resourceid,
+                "sortorder": 0,
+                "transaction_id": None,
+            }
+        )
+
+        with self.subTest("resource does not exist before post"):
+            self.assertFalse(
+                models.ResourceInstance.objects.filter(pk=resourceid).exists()
+            )
+
+        self.client.post(
+            reverse("api_tiles", kwargs={"tileid": tileid}),
+            content_type="application/json",
+            data=values,
+        )
+
+        with self.subTest("resource is created after first post"):
+            self.assertTrue(
+                models.ResourceInstance.objects.filter(pk=resourceid).exists()
+            )
+
+
+class ResourceIdentifiersAPITests(ArchesTestCase):
+    graph_fixtures = ["Data_Type_Model"]
+    data_type_graphid = "330802c5-95bd-11e8-b7ac-acde48001122"
+    non_legacy_resource_instanceid = "eb817333-2010-4cf5-a6e9-88003bfa8b64"
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.add_users()
+
+        cls.data_type_graph = Graph.objects.get(pk=cls.data_type_graphid)
+
+        cls.resource_instance_id = uuid.UUID(cls.non_legacy_resource_instanceid)
+        cls.resource_instance = models.ResourceInstance.objects.create(
+            resourceinstanceid=cls.resource_instance_id,
+            graph=cls.data_type_graph,
+        )
+
+    def test_get_resource_identifiers_not_found(self):
+        self.client.login(username="admin", password="admin")
+        response = self.client.get(
+            reverse("api-resource-identifiers", args=[str(uuid.uuid4())])
+        )
+        self.assertEqual(response.status_code, HTTPStatus.NOT_FOUND)
+
+    @patch("arches.app.views.api.resource.user_can_read_resource")
+    def test_get_resource_identifiers_permission_denied(self, mock_user_can_read):
+        self.client.login(username="admin", password="admin")
+        mock_user_can_read.return_value = False
+
+        response = self.client.get(
+            reverse("api-resource-identifiers", args=[str(self.resource_instance_id)])
+        )
+        self.assertEqual(response.status_code, HTTPStatus.FORBIDDEN)
+
+    @patch("arches.app.views.api.resource.user_can_read_resource")
+    def test_get_resource_identifiers_returns_identifiers(self, mock_user_can_read):
+        self.client.login(username="admin", password="admin")
+        mock_user_can_read.return_value = True
+
+        models.ResourceIdentifier.objects.create(
+            resourceid=self.resource_instance,
+            identifier="ID-1",
+            source="Unit Test",
+            identifier_type="test",
+        )
+        models.ResourceIdentifier.objects.create(
+            resourceid=self.resource_instance,
+            identifier="ID-2",
+            source="Unit Test",
+            identifier_type="test",
+        )
+
+        response = self.client.get(
+            reverse("api-resource-identifiers", args=[str(self.resource_instance_id)])
+        )
+        self.assertEqual(response.status_code, HTTPStatus.OK)
+
+        response_payload = json.loads(response.content)
+        self.assertEqual(len(response_payload), 2)
+        self.assertEqual(response_payload[0]["identifier"], "ID-1")
+        self.assertEqual(response_payload[1]["identifier"], "ID-2")
+
+    @patch("arches.app.views.api.resource.user_can_edit_resource")
+    def test_post_resource_identifiers_permission_denied(self, mock_user_can_edit):
+        self.client.login(username="admin", password="admin")
+        mock_user_can_edit.return_value = False
+
+        response = self.client.post(
+            reverse("api-resource-identifiers", args=[str(self.resource_instance_id)]),
+            data=json.dumps(
+                {"identifier": "ID-1", "source": "Unit Test", "identifier_type": "test"}
+            ),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, HTTPStatus.FORBIDDEN)
+
+    @patch("arches.app.views.api.resource.user_can_edit_resource")
+    def test_post_resource_identifiers_invalid_payload(self, mock_user_can_edit):
+        self.client.login(username="admin", password="admin")
+        mock_user_can_edit.return_value = True
+
+        with patch(
+            "arches.app.views.api.resource.JSONDeserializer.deserialize"
+        ) as mock_deserialize:
+            mock_deserialize.side_effect = Exception("bad json")
+
+            response = self.client.post(
+                reverse(
+                    "api-resource-identifiers", args=[str(self.resource_instance_id)]
+                ),
+                data=b"{not-json",
+                content_type="application/json",
+            )
+        self.assertEqual(response.status_code, HTTPStatus.BAD_REQUEST)
+
+    @patch("arches.app.views.api.resource.user_can_edit_resource")
+    def test_post_resource_identifiers_creates_identifier(self, mock_user_can_edit):
+        self.client.login(username="admin", password="admin")
+        mock_user_can_edit.return_value = True
+
+        self.assertEqual(
+            models.ResourceIdentifier.objects.filter(
+                resourceid=self.resource_instance
+            ).count(),
+            0,
+        )
+
+        response = self.client.post(
+            reverse("api-resource-identifiers", args=[str(self.resource_instance_id)]),
+            data=json.dumps(
+                {"identifier": "ID-1", "source": "Unit Test", "identifier_type": "test"}
+            ),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, HTTPStatus.OK)
+
+        self.assertEqual(
+            models.ResourceIdentifier.objects.filter(
+                resourceid=self.resource_instance
+            ).count(),
+            1,
+        )
+
+        created_identifier = models.ResourceIdentifier.objects.get(
+            resourceid=self.resource_instance
+        )
+        self.assertEqual(created_identifier.identifier, "ID-1")
+        self.assertEqual(created_identifier.source, "Unit Test")
+        self.assertEqual(created_identifier.identifier_type, "test")
+
+    @patch("arches.app.views.api.resource.user_can_edit_resource")
+    def test_post_resource_identifiers_updates_identifier(self, mock_user_can_edit):
+        self.client.login(username="admin", password="admin")
+        mock_user_can_edit.return_value = True
+
+        existing_identifier = models.ResourceIdentifier.objects.create(
+            resourceid=self.resource_instance,
+            identifier="ID-1",
+            source="Unit Test",
+            identifier_type="test",
+        )
+
+        response = self.client.post(
+            reverse("api-resource-identifiers", args=[str(self.resource_instance_id)]),
+            data=json.dumps(
+                {
+                    "id": existing_identifier.pk,
+                    "identifier": "ID-2",
+                    "source": "Unit Test Updated",
+                    "identifier_type": "updated",
+                }
+            ),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, HTTPStatus.OK)
+
+        existing_identifier.refresh_from_db()
+        self.assertEqual(existing_identifier.identifier, "ID-2")
+        self.assertEqual(existing_identifier.source, "Unit Test Updated")
+        self.assertEqual(existing_identifier.identifier_type, "updated")
 
 
 class ResourceInstanceLifecycleStatesTest(ArchesTestCase):

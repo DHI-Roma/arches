@@ -16,6 +16,7 @@ from django.core.files import File
 from django.core.files.images import get_image_dimensions
 from django.core.files.storage import default_storage
 from django.db import connection
+from django.db.models import Q
 from django.utils.translation import get_language
 from django.utils.translation import gettext as _
 
@@ -716,6 +717,17 @@ class DateDataType(BaseDataType):
                 errors.append(error_message)
         return errors
 
+    def clean(self, tile, nodeid):
+        super().clean(tile, nodeid)
+        if tile.data[nodeid] == "Date of Data Entry":
+            cnw = models.CardXNodeXWidget.objects.get(node__nodeid=nodeid)
+            if cnw.config.get("dateFormat", None):
+                tile.data[nodeid] = datetime.now().strftime(
+                    self.date_format_lookup[cnw.config.get("dateFormat")]
+                )
+            else:
+                tile.data[nodeid] = ""
+
     def get_valid_date_format(self, value):
         valid = False
         valid_date_format = ""
@@ -1087,7 +1099,7 @@ class FileListDataType(BaseDataType):
     def validate_file_types(self, request=None, nodeid=None):
         errors = []
         validator = FileValidator()
-        files = request.FILES.getlist("file-list_" + nodeid, [])
+        files = self._get_files_from_request(request, nodeid)
         for file in files:
             errors = errors + validator.validate_file_type(
                 file.file, file.name.split(".")[-1]
@@ -1161,7 +1173,7 @@ class FileListDataType(BaseDataType):
                                 ).format(metadata["name"]),
                             }
                         )
-                files = request.FILES.getlist(f"file-list_{node.nodeid}", [])
+                files = self._get_files_from_request(request, node.nodeid)
                 for file in files:
                     width, height = get_image_dimensions(file.file)
                     if not width or not height:
@@ -1320,9 +1332,8 @@ class FileListDataType(BaseDataType):
                             except models.File.DoesNotExist:
                                 logger.exception(_("File does not exist"))
 
-            files = request.FILES.getlist(
-                "file-list_" + nodeid + "_preloaded", []
-            ) + request.FILES.getlist("file-list_" + nodeid, [])
+            files = self._get_files_from_request(request, nodeid, tile)
+
             tile_exists = models.TileModel.objects.filter(pk=tile.tileid).exists()
 
             for file_data in files:
@@ -1359,6 +1370,29 @@ class FileListDataType(BaseDataType):
                                     nodeid
                                 ] = updated_file_records
                             tile_to_update.save()
+
+    def _get_files_from_request(self, request, nodeid, tile=None):
+        # Try to get the files with the nodeid only. NB - this doesn't support saving multiple tiles in one POST
+        file_list_key = "file-list_" + nodeid
+        files = request.FILES.getlist(
+            file_list_key + "_preloaded", []
+        ) + request.FILES.getlist(
+            file_list_key,
+            [],
+        )
+
+        # If they weren't available in the POST with the nodeid, try the tile-scoped file names.
+        # This adds support for saving multiple tiles in one POST
+        if len(files) == 0 and tile:
+            # First check to see if the files have been set using the tile ID
+            file_list_key = f"file-list_{tile.tileid}-{nodeid}"
+            files = request.FILES.getlist(
+                file_list_key + "_preloaded", []
+            ) + request.FILES.getlist(
+                file_list_key,
+                [],
+            )
+        return files
 
     def get_compatible_renderers(self, file_data):
         extension = Path(file_data["name"]).suffix.strip(".")
@@ -2213,7 +2247,7 @@ class ResourceInstanceDataType(BaseDataType):
                 try:
                     resourceid = resourceXresource["resourceId"]
                     related_resource = Resource.objects.get(pk=resourceid)
-                    displayname = related_resource.displayname()
+                    displayname = related_resource.displayname(kwargs)
                     if displayname is not None:
                         items.append(displayname)
                 except (TypeError, KeyError):
@@ -2602,3 +2636,84 @@ class AnnotationDataType(BaseDataType):
             }
         }
         return mapping
+
+
+class LanguageDataType(BaseDataType):
+    def __init__(self, model=None):
+        super(LanguageDataType, self).__init__(model=model)
+        self.language_lookup = {}  # {code or name: Language model}
+
+    def validate(
+        self,
+        value,
+        row_number=None,
+        source="",
+        node=None,
+        nodeid=None,
+        strict=False,
+        **kwargs,
+    ):
+        errors = []
+        if value is not None:
+            found_language = self.lookup_language(value)
+            if not found_language:
+                message = _(
+                    "The language '{0}' is not a valid language code or name.".format(
+                        value
+                    )
+                )
+                title = _("Invalid Language Datatype")
+                error_message = self.create_error_message(
+                    value, source, row_number, message, title
+                )
+                errors.append(error_message)
+        return errors
+
+    def transform_value_for_tile(self, value, **kwargs):
+        if value is not None:
+            found_language = self.lookup_language(value)
+            if found_language:
+                return found_language.code
+        return None
+
+    # TODO: add RDF export method that uses this value as language tag for literals
+    # likely a tile method
+    # def transform_export_values(self, value, *args, **kwargs):
+    #     return super().transform_export_values(value, *args, **kwargs)
+
+    def lookup_language(self, value) -> models.Language | None:
+        if type(value) == list and len(value) > 0:
+            value = value[0]  # Arches with i18n may send list of values
+        if not value:
+            return None
+        if value in self.language_lookup:
+            return self.language_lookup[value]
+        language = models.Language.objects.filter(Q(code=value) | Q(name=value)).first()
+        if language:
+            self.language_lookup[language.code] = language
+            self.language_lookup[language.name] = language
+            return language
+        return None
+
+    def get_display_value(self, tile, node, **kwargs):
+        data = self.get_tile_data(tile)
+        if data:
+            language = self.lookup_language(data[str(node.nodeid)])
+            if language:
+                return language.name
+        return ""
+
+    def append_search_filters(self, value, node, query, request):
+        try:
+            operation = value["op"]
+            if operation == "null" or operation == "not_null":
+                self.append_null_search_filters(value, node, query, request)
+            elif value["val"] != "":
+                field = f"tiles.data.{str(node.pk)}"
+                match_query = Term(field=field, term=value["val"])
+                if "!" not in operation:
+                    query.must(match_query)
+                else:
+                    query.must_not(match_query)
+        except KeyError:
+            pass
