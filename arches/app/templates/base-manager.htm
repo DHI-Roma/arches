@@ -370,8 +370,8 @@
 
     </div>
 
-    <button id="backToTopBtn" aria-hidden="true" data-bind="attr: {'aria-label': $root.translations.goToTop}, click: backToTopHandler, event:{keyup: backToTopHandler}">
-        <i class="fa fa-chevron-up"></i>
+    <button id="backToTopBtn" aria-hidden="true" tabindex="-1" data-bind="attr: {'aria-label': $root.translations.goToTop}, click: backToTopHandler, event:{keyup: backToTopHandler}">
+        <i class="fa fa-chevron-up" aria-hidden="true"></i>
     </button>
 
 {% endblock body %}
