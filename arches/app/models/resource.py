@@ -143,12 +143,10 @@ class Resource(models.ResourceInstance):
         if self.name is None:
             self.name = {}
 
-        requested_language = None
+        if context is None:
+            context = {}
 
-        if context and "language" in context:
-            requested_language = context["language"]
-        language = requested_language or get_language()
-
+        language = context.get("language", get_language())
         if language not in self.descriptors:
             self.descriptors[language] = {}
 
@@ -177,8 +175,9 @@ class Resource(models.ResourceInstance):
     ):
         """
         descriptors -- iterator with descriptors to be calculated
-        context -- Dictionary with any key:value pairs needed to control the behavior of a custom descriptor function
-
+        context -- Dictionary which may have:
+            language -- Language code in which the descriptor should be returned (e.g. 'en').
+            any key:value pairs needed to control the behavior of a custom descriptor function
         """
 
         if self.descriptor_function is None:  # might be empty queryset
@@ -397,7 +396,7 @@ class Resource(models.ResourceInstance):
         Indexes all the necessary items values of a resource to support search
 
         Keyword Arguments:
-        context -- a string such as "copy" to indicate conditions under which a document is indexed
+        context -- Dictionary with descriptor and indexing options
         """
 
         if str(self.graph_id) != str(settings.SYSTEM_SETTINGS_RESOURCE_MODEL_ID):
@@ -466,7 +465,7 @@ class Resource(models.ResourceInstance):
         fetchTiles -- instead of fetching the tiles from the database get them off the model itself
         datatype_factory -- refernce to the DataTypeFactory instance
         node_datatypes -- a dictionary of datatypes keyed to node ids
-        context -- a string such as "copy" to indicate conditions under which a document is indexed
+        context -- Dictionary with descriptor and indexing options
         all_users -- an iterable of User objects, e.g. User.objects.prefetch_related("groups")
 
         """
@@ -497,6 +496,7 @@ class Resource(models.ResourceInstance):
             )
         except ObjectDoesNotExist:
             document["date_last_edited"] = None
+
         for lang in settings.LANGUAGES:
             if context is None:
                 context = {}
@@ -1020,36 +1020,36 @@ class Resource(models.ResourceInstance):
 
     def copy(self):
         """
-        Returns a copy of this resource instance including a copy of all tiles associated with this resource instance
-
+        Returns an unsaved copy of this resource instance including a copy of all
+        tiles. Implementor should use `save` or `bulk_save` to ensure side effects
+        (like indexing, edit logging, pre/post tile save) are handled properly.
         """
-        # need this here to prevent a circular import error
         from arches.app.models.tile import Tile
 
-        id_map = {}
-        new_resource = Resource()
-        new_resource.graph = self.graph
+        new_resource, new_tiles = super()._copy()
 
-        if len(self.tiles) == 0:
-            self.tiles = Tile.objects.filter(resourceinstance=self)
+        proxy_by_id = {}
+        for tile_model in new_tiles:
+            proxy_tile = Tile(
+                tileid=tile_model.tileid,
+                data=tile_model.data,
+                nodegroup_id=tile_model.nodegroup_id,
+                sortorder=tile_model.sortorder,
+                resourceinstance_id=tile_model.resourceinstance_id,
+            )
+            proxy_by_id[tile_model.tileid] = proxy_tile
 
-        for tile in self.tiles:
-            new_tile = Tile()
-            new_tile.data = tile.data
-            new_tile.nodegroup = tile.nodegroup
-            new_tile.parenttile = tile.parenttile
-            new_tile.resourceinstance = new_resource
-            new_tile.sortorder = tile.sortorder
+        top_level_tiles = []
+        for tile_model in new_tiles:
+            proxy_tile = proxy_by_id[tile_model.tileid]
+            if tile_model.parenttile_id and tile_model.parenttile_id in proxy_by_id:
+                parent_proxy = proxy_by_id[tile_model.parenttile_id]
+                proxy_tile.parenttile = parent_proxy
+                parent_proxy.tiles.append(proxy_tile)
+            else:
+                top_level_tiles.append(proxy_tile)
 
-            new_resource.tiles.append(new_tile)
-            id_map[tile.pk] = new_tile
-
-        for tile in new_resource.tiles:
-            if tile.parenttile:
-                tile.parenttile = id_map[tile.parenttile_id]
-
-        with transaction.atomic():
-            new_resource.save(context="copy")
+        new_resource.tiles = top_level_tiles
 
         return new_resource
 

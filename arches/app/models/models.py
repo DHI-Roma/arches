@@ -1,3 +1,4 @@
+import copy
 import datetime
 import json
 import logging
@@ -12,7 +13,7 @@ from django.contrib.gis.db import models
 from django.core.exceptions import ObjectDoesNotExist, ValidationError
 from django.core.serializers.json import DjangoJSONEncoder
 from django.core.validators import RegexValidator, validate_slug
-from django.db import ProgrammingError, connection
+from django.db import ProgrammingError, connection, transaction
 from django.db.models import Case, F, JSONField, Max, Q, Value, When
 from django.db.models.constraints import UniqueConstraint
 from django.db.models.expressions import CombinedExpression
@@ -1619,6 +1620,49 @@ class ResourceInstance(SaveSupportsBlindOverwriteMixin, models.Model):
         edit.edittype = edit_type
         edit.save()
 
+    def _copy(self):
+        """
+        Returns a copy of this resource instance including a copy of all
+        associated tiles. Runs datatype.copy() transforms but does NOT run
+        side effects like indexing or creating edit log entries.
+
+        Implementor is responsible for saving the new resource instance and tiles,
+        and for any additional side effects.
+        """
+        from arches.app.datatypes.datatypes import DataTypeFactory
+
+        original_tiles = self.tilemodel_set.prefetch_related("nodegroup__node_set")
+        datatype_factory = DataTypeFactory()
+
+        new_resource = copy.copy(self)
+        new_resource.pk = uuid.uuid4()
+        new_resource._state.adding = True
+
+        id_map = {}
+        parent_tile_map = {}
+        new_tiles = []
+
+        for tile in original_tiles:
+            original_tile_id = tile.tileid
+            original_parent_id = tile.parenttile_id
+            new_tile = tile._copy(
+                datatype_factory=datatype_factory,
+                resource=new_resource,
+            )
+
+            new_tiles.append(new_tile)
+            id_map[original_tile_id] = new_tile
+            if original_parent_id:
+                parent_tile_map[new_tile] = original_parent_id
+
+        # Remap parent tile references
+        for new_tile in new_tiles:
+            original_parent_id = parent_tile_map.get(new_tile)
+            if original_parent_id:
+                new_tile.parenttile = id_map[original_parent_id]
+
+        return new_resource, new_tiles
+
 
 class ResourceIdentifier(models.Model):
     id = models.BigAutoField(primary_key=True)
@@ -1994,6 +2038,40 @@ class TileModel(SaveSupportsBlindOverwriteMixin, models.Model):  # Tile
             resourceinstance_id=self.resourceinstance_id,
         ).aggregate(Max("sortorder"))["sortorder__max"]
         self.sortorder = sortorder_max + 1 if sortorder_max is not None else 0
+
+    def _copy(self, resource, datatype_factory=None):
+        """Returns an unsaved copy of this tile, to be associated with the provided resource instance.
+
+        Side effects like indexing, edit log, and some datatype-specific copy behavior are
+        not executed. For instance, a copied tile with resource-instance node will not
+        have a new resource_x_resource created. For this functionality, use the Resource proxy model copy() method.
+
+        The implementor must set parenttile on the returned tile.
+        provisionaledits are not copied.
+
+        Expects nodegroup.node_set to be prefetched for efficient access to node datatypes
+        """
+        new_tile = TileModel(
+            data=copy.deepcopy(self.data),
+            nodegroup_id=self.nodegroup_id,
+            sortorder=self.sortorder,
+            resourceinstance_id=resource.resourceinstanceid,
+        )
+
+        if not datatype_factory:
+            datatype_factory = DataTypeFactory()
+
+        if new_tile.data:
+            nodes_by_id = {str(node.pk): node for node in self.nodegroup.node_set.all()}
+            for nodeid in list(new_tile.data.keys()):
+                node = nodes_by_id.get(nodeid)
+                if node:
+                    datatype = datatype_factory.get_instance(node.datatype)
+                    new_tile.data[nodeid] = datatype.copy(
+                        new_tile.data[nodeid], resource=resource
+                    )
+
+        return new_tile
 
     def serialize(self, fields=None, exclude=None, **kwargs):
         return JSONSerializer().handle_model(
