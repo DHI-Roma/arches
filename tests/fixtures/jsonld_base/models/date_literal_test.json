@@ -146,7 +146,7 @@
                 "sortorder": 0,
                 "sourcebranchpublication_id": null
             },
-            "slug": null,
+            "slug": "date_literal_test",
             "subtitle": {
                 "en": ""
             },
