@@ -1,7 +1,6 @@
 import importlib
 import os
 import logging
-import shutil
 from celery import shared_task
 from datetime import datetime
 from datetime import timedelta
@@ -9,6 +8,7 @@ from django.contrib.auth.models import User
 from django.core import management
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import connection
+from django.db.models import F, Q
 from django.http import HttpRequest
 from django.utils.translation import gettext as _
 from arches.app.models import models
@@ -109,7 +109,7 @@ def export_search_results(self, userid, request_values, format, report_link):
             "name": export_name,
             "email_link": str(settings.PUBLIC_SERVER_ADDRESS).rstrip("/")
             + "/files/"
-            + str(search_history_obj.downloadfile),
+            + str(exportid),
             "username": _user.first_name or _user.username,
         },
     )
@@ -252,7 +252,7 @@ def load_excel_data(
         load_event = models.LoadEvent.objects.get(loadid=loadid)
         status = _("Completed") if load_event.status == "indexed" else _("Failed")
     except Exception as e:
-        logger.error(e)
+        logger.error(e, exc_info=True)
         load_event = models.LoadEvent.objects.get(loadid=loadid)
         load_event.status = "failed"
         load_event.save()
@@ -328,7 +328,7 @@ def export_excel_data(
         load_event = models.LoadEvent.objects.get(loadid=load_id)
         status = _("Completed") if load_event.status == "indexed" else _("Failed")
     except Exception as e:
-        logger.error(e)
+        logger.error(e, exc_info=True)
         load_event = models.LoadEvent.objects.get(loadid=load_id)
         load_event.status = "failed"
         load_event.save()
@@ -416,7 +416,7 @@ def load_single_csv(
         load_event = models.LoadEvent.objects.get(loadid=loadid)
         status = _("Completed") if load_event.status == "indexed" else _("Failed")
     except Exception as e:
-        logger.error(e)
+        logger.error(e, exc_info=True)
         load_event = models.LoadEvent.objects.get(loadid=loadid)
         load_event.status = "failed"
         load_event.save()
@@ -445,7 +445,7 @@ def load_json_ld(userid, files, summary, result, temp_dir, loadid, moduleid):
         load_event = models.LoadEvent.objects.get(loadid=loadid)
         status = _("Completed") if load_event.status == "indexed" else _("Failed")
     except Exception as e:
-        logger.error(e)
+        logger.error(e, exc_info=True)
         load_event = models.LoadEvent.objects.filter(loadid=loadid).update(
             status="failed"
         )
@@ -491,7 +491,7 @@ def edit_bulk_string_data(
         load_event = models.LoadEvent.objects.get(loadid=load_id)
         status = _("Completed") if load_event.status == "indexed" else _("Failed")
     except Exception as e:
-        logger.error(e)
+        logger.error(e, exc_info=True)
         load_event = models.LoadEvent.objects.get(loadid=load_id)
         load_event.status = "failed"
         load_event.save()
@@ -533,7 +533,7 @@ def edit_bulk_concept_data(
         load_event = models.LoadEvent.objects.get(loadid=load_id)
         status = _("Completed") if load_event.status == "indexed" else _("Failed")
     except Exception as e:
-        logger.error(e)
+        logger.error(e, exc_info=True)
         load_event = models.LoadEvent.objects.get(loadid=load_id)
         load_event.status = "failed"
         load_event.save()
@@ -559,7 +559,7 @@ def bulk_data_deletion(userid, load_id, graph_id, nodegroup_id, resourceids):
         load_event = models.LoadEvent.objects.get(loadid=load_id)
         status = _("Completed") if load_event.status == "indexed" else _("Failed")
     except Exception as e:
-        logger.error(e)
+        logger.error(e, exc_info=True)
         load_event = models.LoadEvent.objects.get(loadid=load_id)
         load_event.status = "failed"
         load_event.save()
@@ -610,7 +610,7 @@ def run_etl_task(**kwargs):
         load_event = models.LoadEvent.objects.get(loadid=loadid)
         status = _("Completed") if load_event.status == "indexed" else _("Failed")
     except Exception as e:
-        logger.error(e)
+        logger.error(e, exc_info=True)
         load_event = models.LoadEvent.objects.get(loadid=loadid)
         load_event.status = "failed"
         load_event.save()
@@ -627,6 +627,109 @@ def reverse_etl_load(loadid):
 
     module = base_import_module.BaseImportModule()
     module.reverse_load(loadid)
+
+
+@shared_task
+def update_resource_instance_data_based_on_graph_diff(
+    initial_graph, updated_graph, user_id
+):
+    logger = logging.getLogger(__name__)
+    user = User.objects.get(id=user_id)
+
+    # TODO: update function name to be less specific
+    notify_completion(
+        _("Updating business data based on graph changes."),
+        user,
+    )
+
+    try:
+        # delete tiles whose nodegroups are no longer in the updated graph
+        updated_nodegroup_ids = {
+            nodegroup["nodegroupid"] for nodegroup in updated_graph["nodegroups"]
+        }
+        orphaned_nodegroup_ids = {
+            nodegroup["nodegroupid"]
+            for nodegroup in initial_graph["nodegroups"]
+            if nodegroup["nodegroupid"] not in updated_nodegroup_ids
+        }
+        models.TileModel.objects.filter(
+            nodegroup_id__in=orphaned_nodegroup_ids,
+            resourceinstance__graph_publication_id=initial_graph["publication_id"],
+        ).delete()
+
+        # delete tiles whose parent tile's nodegroup_id does not match the expected parent nodegroup_id
+        models.TileModel.objects.filter(
+            parenttile__isnull=False,
+            resourceinstance__graph_publication_id=initial_graph["publication_id"],
+        ).filter(
+            ~Q(parenttile__nodegroup_id=F("nodegroup__parentnodegroup_id"))
+        ).delete()
+
+        # add/remove nodes and change default values
+        resource_instances = models.ResourceInstance.objects.filter(
+            graph_publication_id=initial_graph["publication_id"]
+        )
+        resource_instance_count = resource_instances.count()
+
+        initial_node_ids_to_default_values = {
+            node["nodeid"]: (node.get("config") or {}).get("defaultValue")
+            for node in initial_graph["nodes"]
+        }
+
+        updated_node_ids_to_default_values = {
+            node["nodeid"]: (node.get("config") or {}).get("defaultValue")
+            for node in updated_graph["nodes"]
+        }
+
+        for tile in models.TileModel.objects.filter(
+            resourceinstance__in=resource_instances
+        ):
+            updated_node_ids = [
+                node["nodeid"]
+                for node in updated_graph["nodes"]
+                if node["nodegroup_id"] == str(tile.nodegroup_id)
+            ]
+
+            # delete nodes not in updated graph
+            for node_id in list(tile.data.keys()):
+                if node_id not in updated_node_ids:
+                    del tile.data[node_id]
+
+            # add nodes that only exist in updated graph
+            # or update nodes default value if changed
+            for node_id in updated_node_ids:
+                initial_default_value = initial_node_ids_to_default_values.get(node_id)
+
+                if (
+                    node_id not in tile.data.keys()
+                    or tile.data[node_id] == initial_default_value
+                ):
+                    tile.data[node_id] = updated_node_ids_to_default_values.get(node_id)
+
+            tile.save()
+
+        # update resource_instance publication_id
+        for resource_instance in resource_instances:
+            resource_instance.graph_publication_id = updated_graph["publication_id"]
+            resource_instance.save()
+
+        notify_completion(
+            _(
+                "Business has been updated in concurrence with publishing the latest model. {} Resource Instances updated.".format(
+                    resource_instance_count
+                )
+            ),
+            user,
+        )
+
+    except Exception as e:
+        logger.error(e, exc_info=True)
+        notify_completion(
+            _(
+                "Business data update failed. Check the error logs for more information."
+            ),
+            user,
+        )
 
 
 def create_user_task_record(taskid, taskname, userid):

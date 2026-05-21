@@ -106,7 +106,9 @@ DATABASES = {
         "ENGINE": "django.contrib.gis.db.backends.postgis",
         "HOST": "localhost",
         "NAME": "{{ project_name }}",
-        "OPTIONS": {},
+        "OPTIONS": {
+            "options": "-c cursor_tuple_fraction=1",
+        },
         "PASSWORD": "postgis",
         "PORT": "5432",
         "POSTGIS_TEMPLATE": "template_postgis",
@@ -125,7 +127,6 @@ SEARCH_THUMBNAILS = False
 
 INSTALLED_APPS = (
     "webpack_loader",
-    "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
     "django.contrib.sessions",
@@ -133,22 +134,28 @@ INSTALLED_APPS = (
     "django.contrib.staticfiles",
     "django.contrib.gis",
     "django_hosts",
-    "arches",
     "arches.app.models",
     "arches.management",
     "guardian",
-    "captcha",
+    "django_recaptcha",
     "revproxy",
     "corsheaders",
     "oauth2_provider",
     "django_celery_results",
+    "django_migrate_sql",
+    "pgtrigger",
     # "silk",
     "{{ project_name }}",  # Ensure the project is listed before any other arches applications
 )
 
-# Placing this last ensures any templates provided by Arches Applications
-# take precedence over core arches templates in arches/app/templates.
-INSTALLED_APPS += ("arches.app",)
+# Placing this last ensures any templates and modules provided by
+# Arches Applications take precedence over core arches templates
+# in arches/app/templates.
+INSTALLED_APPS += (
+    "arches",
+    "arches.app",
+    "django.contrib.admin",
+)
 
 MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",
@@ -237,7 +244,17 @@ LOGGING = {
             'handlers': ['file', 'console'],
             'level': 'WARNING',
             'propagate': True
-        }
+        },
+        "{{ project_name }}": {
+            "handlers": ["file", "console"],
+            "level": "WARNING",
+            "propagate": True,
+        },
+        "django.request": {
+            "handlers": ["file", "console"],
+            "level": "WARNING",
+            "propagate": True,
+        },
     }
 }
 
@@ -280,6 +297,15 @@ CACHE_BY_USER = {
     "default": 3600 * 24, #24hrs
     "anonymous": 3600 * 24 #24hrs
     }
+
+# Changing PERMISSION_FRAMEWORK requires reindexing.
+PERMISSION_FRAMEWORK = "arches_default_deny.ArchesDefaultDenyPermissionFramework"
+
+# Changing PERMISSION_DEFAULTS requires reindexing.
+PERMISSION_DEFAULTS = {}
+# PERMISSION_DEFAULTS = {
+#     "graphid": [{"id": "1", "type": "user", "permissions": ["no_access_to_resourceinstance"]}]
+# }
 
 TILE_CACHE_TIMEOUT = 600 #seconds
 CLUSTER_DISTANCE_MAX = 5000 #meters

@@ -33,6 +33,7 @@ class ImportSingleCsv(BaseImportModule):
             else settings.DEFAULT_RESOURCE_IMPORT_USER["userid"]
         )
         self.mode = "cli" if not request and params else "ui"
+        self.validated_data = {}
         try:
             self.user = User.objects.get(pk=self.userid)
         except User.DoesNotExist:
@@ -64,7 +65,8 @@ class ImportSingleCsv(BaseImportModule):
             GraphModel.objects.all()
             .exclude(pk=settings.SYSTEM_SETTINGS_RESOURCE_MODEL_ID)
             .exclude(isresource=False)
-            .exclude(publication_id__isnull=True)
+            .exclude(is_active=False)
+            .exclude(source_identifier__isnull=False)
             .order_by(graph_name_i18n)
         )
         return {"success": True, "data": graphs}
@@ -425,7 +427,9 @@ class ImportSingleCsv(BaseImportModule):
                             source_value = row[i]
                             config = current_node.config
                             config["nodeid"] = node
-                            config["path"] = temp_dir
+
+                            config["bulk_import"] = True
+                            config["loadid"] = self.loadid
 
                             if source_value:
                                 if datatype == "string":
@@ -554,8 +558,9 @@ class ImportSingleCsv(BaseImportModule):
                                 nodegroup_depth,
                                 source_description,
                                 operation,
-                                passes_validation
-                            ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+                                passes_validation,
+                                sortorder
+                            ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
                             (
                                 nodegroup,
                                 legacyid,
@@ -567,6 +572,7 @@ class ImportSingleCsv(BaseImportModule):
                                 csv_file_name,
                                 "insert",
                                 passes_validation,
+                                0,
                             ),
                         )
 

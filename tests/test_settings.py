@@ -23,15 +23,9 @@ from arches.settings import *
 from django.utils.translation import gettext_lazy as _
 
 PACKAGE_NAME = "arches"
-TEST_ROOT = os.path.normpath(os.path.join(ROOT_DIR, "..", "tests"))
 APP_ROOT = ""
+TEST_ROOT = os.path.normpath(os.path.join(ROOT_DIR, "..", "tests"))
 STATICFILES_DIRS = []
-
-# LOAD_V3_DATA_DURING_TESTS = True will engage the most extensive the of the v3
-# data migration tests, which could add over a minute to the test process. It's
-# recommended that this setting only be set to True in tests/settings_local.py
-# and run in specific cases at the discretion of the developer.
-LOAD_V3_DATA_DURING_TESTS = False
 
 RESOURCE_GRAPH_LOCATIONS = [
     os.path.join(TEST_ROOT, "fixtures", "resource_graphs"),
@@ -44,6 +38,7 @@ RESOURCE_GRAPH_LOCATIONS = [
         "graphs",
         "resource_models",
     ),
+    os.path.join(TEST_ROOT, "fixtures", "jsonld_base", "models"),
 ]
 REFERENCE_DATA_FIXTURE_LOCATION = os.path.join(
     TEST_ROOT, "fixtures", "testing_prj", "testing_prj", "pkg", "reference_data"
@@ -72,6 +67,7 @@ CACHES = {
     },
 }
 
+LOGGING["loggers"]["django.request"]["level"] = "ERROR"
 LOGGING["loggers"]["arches"]["level"] = "ERROR"
 
 ELASTICSEARCH_PREFIX = "test"
@@ -88,8 +84,6 @@ LOCAL_BROWSERS = []  # ['Firefox']
 
 ENABLE_USER_SIGNUP = True
 FORCE_USER_SIGNUP_EMAIL_AUTHENTICATION = True
-
-OVERRIDE_RESOURCE_MODEL_LOCK = True
 
 ENABLE_TWO_FACTOR_AUTHENTICATION = False
 FORCE_TWO_FACTOR_AUTHENTICATION = False
@@ -110,6 +104,8 @@ DOCKER = False
 
 PERMISSION_DEFAULTS = {}
 
+CELERY_CHECK_ONLY_INSPECT_BROKER = True
+
 
 try:
     from arches.settings_local import *
@@ -121,3 +117,8 @@ if DOCKER:
         from arches.settings_docker import *
     except ImportError:
         pass
+
+
+# Tests shouldn't depend on celery running, so overwrite after settings_local import
+# This is enough to fool check_if_celery_available()
+CELERY_BROKER_URL = ""

@@ -62,14 +62,21 @@
     font-size: 20px;
     right: 20px;
     border-radius: 2px;
+    padding: 10px 15px;
+    border: none;
     opacity: 0;
+    visibility: hidden;
     z-index: 1100;
-    -webkit-transition: opacity .3s;
-    transition: opacity .3s;
-	&:hover {
-		opacity: 1!important;
-    	-webkit-transition: opacity .3s!important;
-    	transition: opacity .3s!important;
+    -webkit-transition: opacity .3s, visibility .3s;
+    transition: opacity .3s, visibility .3s;
+	&:hover,
+	&:focus {
+		opacity: 1;
+		outline: 2px solid #fff;
+		outline-offset: 2px;
+	}
+	&:focus {
+		visibility: visible;
 	}
 	@include break-at(mobile) {
         bottom: 5px;

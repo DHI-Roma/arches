@@ -2,7 +2,7 @@ import json
 import logging
 import zipfile
 from datetime import datetime
-from functools import cache, lru_cache
+from functools import lru_cache
 from pathlib import Path
 
 from django.core.files import File
@@ -12,11 +12,11 @@ from django.db import transaction
 from django.utils.translation import gettext as _
 
 from arches.app.etl_modules.save import (
-    _save_to_tiles,
     disable_tile_triggers,
     reenable_tile_triggers,
     _post_save_edit_log,
 )
+from arches.app.etl_modules.staging_to_tile import staging_to_tile
 from arches.app.tasks import load_json_ld
 from arches.app.utils.data_management.resources.formats.rdffile import (
     ValueErrorWithNodeInfo,
@@ -49,13 +49,7 @@ def get_graph_tree_from_slug(slug):
 
 @lru_cache(maxsize=1)
 def graph_id_from_slug(slug):
-    return GraphModel.objects.get(slug=slug).pk
-
-
-@cache
-def fallback_node():
-    """Consider removing this if we make LoadStaging.nodegroup nullable."""
-    return Node.objects.filter(nodegroup__isnull=False).first()
+    return GraphModel.objects.get(slug=slug, source_identifier=None).pk
 
 
 class RedirectStdoutToLogger:
@@ -231,10 +225,8 @@ class JSONLDImporter(BaseImportModule):
             message=exception_message,
             value=str(exception.value) if has_info else None,
             datatype=exception.datatype if has_info else None,
-            node_id=exception.node_id if has_info else fallback_node().nodeid,
-            nodegroup_id=(
-                exception.nodegroup_id if has_info else fallback_node().nodegroup_id
-            ),
+            node_id=exception.node_id if has_info else None,
+            nodegroup_id=exception.nodegroup_id if has_info else None,
         )
         le.clean_fields()
         le.save()
@@ -251,7 +243,7 @@ class JSONLDImporter(BaseImportModule):
         )
 
         dummy_tile_info = {
-            str(le.node_id or fallback_node().nodeid): {
+            str(le.node_id): {
                 "value": {},
                 "valid": False,
                 "source": early_failure,
@@ -262,9 +254,7 @@ class JSONLDImporter(BaseImportModule):
 
         ls = LoadStaging(
             load_event_id=self.loadid,
-            nodegroup_id=(
-                exception.nodegroup_id if has_info else fallback_node().nodegroup_id
-            ),
+            nodegroup_id=exception.nodegroup_id if has_info else None,
             value=dummy_tile_info,
             passes_validation=False,
             source_description=early_failure,
@@ -280,8 +270,11 @@ class JSONLDImporter(BaseImportModule):
             datatype = nodegroup_info[nodeid]["datatype"]
             datatype_instance = self.datatype_factory.get_instance(datatype)
             config = nodegroup_info[nodeid]["config"]
-            config["path"] = self.temp_dir
+
+            config["bulk_import"] = True
+
             config["loadid"] = self.loadid
+            config["nodeid"] = nodeid
             value, validation_errors = self.prepare_data_for_loading(
                 datatype_instance,
                 source_value,
@@ -341,6 +334,12 @@ class JSONLDImporter(BaseImportModule):
 
     def save_to_tiles(self, cursor, userid, loadid, multiprocessing=False):
         error_saving_tiles = None
+        error_response = {
+            "status": 400,
+            "success": False,
+            "title": _("Failed to complete load"),
+            "message": _("Unable to insert record into staging table"),
+        }
 
         # Disable the tile triggers early, because below we wrap resource
         # deletion in a transaction. Avoids "pending trigger events..." error.
@@ -357,11 +356,14 @@ class JSONLDImporter(BaseImportModule):
 
                 # Now we can check tile cardinality.
                 super().check_tile_cardinality(cursor)
-
-                error_saving_tiles = _save_to_tiles(cursor, loadid)
-                if error_saving_tiles:
-                    # Revert transaction.
-                    raise RuntimeError
+            try:
+                # staging_to_tile is in its own transaction
+                if not staging_to_tile(loadid):
+                    error_saving_tiles = error_response
+            except:
+                # Revert transaction.
+                error_saving_tiles = error_response
+                raise RuntimeError
         except:
             return error_saving_tiles
         finally:

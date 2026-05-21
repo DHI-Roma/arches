@@ -89,6 +89,15 @@ class BaseDataType(object):
         """
         return value
 
+    def copy(self, value, **kwargs):
+        """
+        Allows for transformation of a value when copying a resource.
+        By default, the value is returned unchanged, but this can be overridden to allow
+        for transformations during copy operations
+        (eg: updating resource to resource records or duplicating files during copy)
+        """
+        return value
+
     def get_bounds(self, tile, node):
         """
         Gets the bounds of a geometry if the datatype is spatial
@@ -239,10 +248,7 @@ class BaseDataType(object):
         else:
             return data
 
-    def get_display_value(self, tile, node, **kwargs):
-        """
-        Returns a list of concept values for a given node
-        """
+    def get_display_value(self, tile, node, **kwargs) -> str:
         data = self.get_tile_data(tile)
 
         if data:
@@ -250,6 +256,7 @@ class BaseDataType(object):
 
             if display_value:
                 return str(display_value)
+        return ""  # TODO (arches_version): configure this with a setting in 8.1
 
     def get_search_terms(self, nodevalue, nodeid=None):
         """

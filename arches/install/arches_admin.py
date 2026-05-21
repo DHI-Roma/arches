@@ -12,7 +12,7 @@ from django.core.management.base import CommandError
 from django.utils.crypto import get_random_string
 
 from arches import __version__
-from arches.version import get_complete_version
+from packaging.version import Version
 
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "arches.settings")
@@ -88,6 +88,14 @@ parser_startproject.add_argument(
     ),
 )
 
+parser_startproject.add_argument(
+    "-y",
+    "--yes",
+    action="store_true",
+    dest="yes",
+    help='used to force a yes answer to any user input "continue? y/n" prompt',
+)
+
 
 class ArchesProjectCommand(TemplateCommand):
     help = (
@@ -107,19 +115,22 @@ class ArchesProjectCommand(TemplateCommand):
         # this is used in the package.json file generated when "arches-admin startproject" is called
         # if this is not a final released version of arches (for developers) then arches_version will be blank
         # and the arches dependency defined in the generated package.json file will point to "master"
-        complete_version = get_complete_version()
-        options["arches_version"] = "master"
-        if complete_version[3] == "final":
-            options["arches_version"] = f"stable/{__version__}"
-        elif complete_version[3] in ["alpha", "beta", "rc"]:
+        complete_version = Version(__version__)
+        if complete_version.is_prerelease:
             options["arches_version"] = (
-                f"dev/{complete_version[0]}.{complete_version[1]}.x"
+                f"dev/{complete_version.major}.{complete_version.minor}.x"
             )
+        else:
+            options["arches_version"] = f"stable/{__version__}"
         options["arches_semantic_version"] = ".".join(
-            [str(arches.VERSION[0]), str(arches.VERSION[1]), str(arches.VERSION[2])]
+            [
+                str(complete_version.major),
+                str(complete_version.minor),
+                str(complete_version.micro),
+            ]
         )
         options["arches_next_minor_version"] = ".".join(
-            [str(arches.VERSION[0]), str(arches.VERSION[1] + 1), "0"]
+            [str(complete_version.major), str(complete_version.minor + 1), "0"]
         )
         options["project_name_title_case"] = project_name.title().replace("_", "")
 
@@ -136,8 +147,7 @@ class ArchesProjectCommand(TemplateCommand):
             "pyproject.toml",
             ".pre-commit-config.yaml",
             ".github/workflows/main.yml",
-            "vitest.config.mts",
-            "vitest.setup.mts",
+            "MANIFEST.in",
         ]:  # relative to app root directory
             file = open(os.path.join(path_to_project, relative_file_path), "r")
             file_data = file.read()
@@ -147,6 +157,10 @@ class ArchesProjectCommand(TemplateCommand):
                 file_data.replace(
                     "{{ project_name_title_case }}",
                     options["project_name_title_case"],
+                )
+                .replace(
+                    "{{ project_name_kebab_case }}",
+                    options["project_name_kebab_case"],
                 )
                 .replace("{{ project_name }}", project_name)
                 .replace(
@@ -166,12 +180,40 @@ class ArchesProjectCommand(TemplateCommand):
 def command_startproject(args):
     options = vars(args)
     name = options["name"]
+    make_directory = False
+
+    project_name_kebab_case = name.replace("_", "-")
+    options["project_name_kebab_case"] = project_name_kebab_case
+    directory_name_will_be_changed = name != project_name_kebab_case
+
+    if not options["directory"] and directory_name_will_be_changed:
+        if not options.get("yes"):
+            response = input(
+                f"The project directory will be renamed from {name} to {project_name_kebab_case}.\n"
+                "If this is not desired, use the --directory option to create "
+                "a directory with the name you want.\n"
+                "Consider using a name distinct from your project name.\n"
+                "For more information, see https://github.com/archesproject/arches/issues/12028\n"
+                "Continue? (y/N):"
+            )
+            if response.lower() not in ["y", "yes"]:
+                print("Operation cancelled.")
+                sys.exit(0)
+
+        make_directory = True
+        options["directory"] = project_name_kebab_case
+
     directory = options["directory"]
+
+    project_path = os.path.join(os.getcwd(), directory if directory else name)
+
+    # TODO: remove manual directory creation when upgrading to Django 6+
+    # re. https://github.com/django/django/pull/18387
+    if make_directory and not os.path.exists(project_path):
+        os.mkdir(project_path)
 
     cmd = ArchesProjectCommand()
     cmd.handle(options)
-
-    project_path = os.path.join(os.getcwd(), (directory if directory else name))
 
     os.chdir(project_path)
     subprocess.call("npm install", shell=True)

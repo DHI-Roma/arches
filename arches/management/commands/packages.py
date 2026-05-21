@@ -39,7 +39,6 @@ import arches.app.utils.data_management.resource_graphs.exporter as graph_export
 import arches.app.utils.task_management as task_management
 from django.db.utils import IntegrityError
 from django.db import transaction, connection
-from django.utils.module_loading import import_string
 from django.core.exceptions import ObjectDoesNotExist
 from django.core.management.base import BaseCommand, CommandError
 from django.core import management
@@ -82,7 +81,6 @@ class Command(BaseCommand):
             dest="operation",
             choices=[
                 "setup",
-                "install",
                 "setup_indexes",
                 "load_concept_scheme",
                 "export_business_data",
@@ -104,8 +102,7 @@ class Command(BaseCommand):
             ],
             help="Operation Type; "
             + "'setup'=Sets up the database schema and code"
-            + "'setup_indexes'=Creates the indexes in Elastic Search needed by the system"
-            + "'install'=Runs the setup file defined in your package root",
+            + "'setup_indexes'=Creates the indexes in Elastic Search needed by the system",
         )
 
         group = parser.add_mutually_exclusive_group()
@@ -334,13 +331,6 @@ class Command(BaseCommand):
 
         if options["operation"] == "setup":
             self.setup(package_name, es_install_location=options["dest_dir"])
-
-        if options["operation"] == "install":
-            warnings.warn(
-                "The install operation does nothing since Arches 7.6. "
-                "In Arches 8.0, calling this operation will raise an exception.",
-                UserWarning,
-            )
 
         if options["operation"] == "setup_indexes":
             self.setup_indexes()
@@ -663,10 +653,12 @@ class Command(BaseCommand):
                 print("Could not save system settings")
             self.export_package_settings(dest_dir, "true")
 
-    @staticmethod
-    def update_resource_geojson_geometries():
-        with connection.cursor() as cursor:
-            cursor.execute("SELECT * FROM refresh_geojson_geometries();")
+    def update_resource_geojson_geometries(self):
+        if not connection.in_atomic_block:
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT * FROM refresh_geojson_geometries();")
+        else:
+            self.stdout.write("WARNING: Not refreshing geometries - transaction active")
 
     def load_package(
         self,
@@ -792,6 +784,22 @@ class Command(BaseCommand):
                 print(e)
                 print("Failed to load sql files")
 
+        @transaction.atomic
+        def load_users(package_dir, users_directory):
+            user_files = sorted(
+                glob.glob(os.path.join(package_dir, users_directory, "*.csv"))
+            )
+            try:
+                with connection.cursor() as cursor:
+                    for user_file in user_files:
+                        management.call_command(
+                            "add_users", operation="csv_users", source=user_file
+                        )
+                        self.stdout.write("  %s" % user_file)
+            except Exception as e:
+                self.stdout.write(e)
+                self.stdout.write("Failed to load user files")
+
         def load_resource_views(package_dir):
             resource_views = sorted(
                 glob.glob(
@@ -825,64 +833,6 @@ class Command(BaseCommand):
                 self.import_graphs(resource_models, overwrite_graphs=overwrite_graphs)
             except IndexError:
                 logger.warning("No resource models in package")
-
-        def load_concepts(package_dir, overwrite, stage, defer_indexing):
-            file_types = ["*.xml", "*.rdf"]
-
-            from time import time
-
-            start = time()
-
-            concept_data = []
-            for file_type in file_types:
-                concept_data.extend(
-                    glob.glob(
-                        os.path.join(
-                            package_dir, "reference_data", "concepts", file_type
-                        )
-                    )
-                )
-
-            bar1 = (
-                pyprind.ProgBar(len(concept_data), bar_char="█", stream=self.stdout)
-                if len(concept_data) > 1
-                else None
-            )
-            for path in concept_data:
-                if bar1 is None:
-                    print(path)
-                self.import_reference_data(path, overwrite, stage, defer_indexing)
-                if bar1 is not None:
-                    head, tail = os.path.split(path)
-                    bar1.update(item_id=tail + (" " * 10))
-
-            collection_data = []
-            for file_type in file_types:
-                collection_data.extend(
-                    glob.glob(
-                        os.path.join(
-                            package_dir, "reference_data", "collections", file_type
-                        )
-                    )
-                )
-
-            bar2 = (
-                pyprind.ProgBar(len(collection_data), bar_char="█", stream=self.stdout)
-                if len(collection_data) > 1
-                else None
-            )
-            for path in collection_data:
-                if bar2 is None:
-                    print(path)
-                self.import_reference_data(path, overwrite, stage, defer_indexing)
-                if bar2 is not None:
-                    head, tail = os.path.split(path)
-                    bar2.update(item_id=tail)
-
-            print(
-                "Total time to load concepts: %s s"
-                % (timedelta(seconds=time() - start))
-            )
 
         def load_mapbox_styles(style_paths, basemap):
             for path in style_paths:
@@ -1268,7 +1218,7 @@ class Command(BaseCommand):
         print("loading etl modules")
         load_etl_modules(package_location)
         print("loading concepts")
-        load_concepts(
+        self.load_concepts(
             package_location, overwrite_concepts, stage_concepts, defer_indexing
         )
         print("loading resource models and branches")
@@ -1303,6 +1253,8 @@ class Command(BaseCommand):
         self.update_resource_geojson_geometries()
         print("loading post sql")
         load_sql(package_location, "post_sql")
+        print("loading users")
+        load_users(package_location, "users")
         print("loading templates")
         load_templates(package_location)
         if defer_indexing is True:
@@ -1316,6 +1268,59 @@ class Command(BaseCommand):
             )
         else:
             print("package load complete")
+
+    def load_concepts(self, package_dir, overwrite, stage, defer_indexing):
+        file_types = ["*.xml", "*.rdf"]
+
+        from time import time
+
+        start = time()
+
+        concept_data = []
+        for file_type in file_types:
+            concept_data.extend(
+                glob.glob(
+                    os.path.join(package_dir, "reference_data", "concepts", file_type)
+                )
+            )
+
+        bar1 = (
+            pyprind.ProgBar(len(concept_data), bar_char="█", stream=self.stdout)
+            if len(concept_data) > 1
+            else None
+        )
+        for path in concept_data:
+            if bar1 is None:
+                print(path)
+            self.import_reference_data(path, overwrite, stage, defer_indexing)
+            if bar1 is not None:
+                head, tail = os.path.split(path)
+                bar1.update(item_id=tail + (" " * 10))
+
+        collection_data = []
+        for file_type in file_types:
+            collection_data.extend(
+                glob.glob(
+                    os.path.join(
+                        package_dir, "reference_data", "collections", file_type
+                    )
+                )
+            )
+
+        bar2 = (
+            pyprind.ProgBar(len(collection_data), bar_char="█", stream=self.stdout)
+            if len(collection_data) > 1
+            else None
+        )
+        for path in collection_data:
+            if bar2 is None:
+                print(path)
+            self.import_reference_data(path, overwrite, stage, defer_indexing)
+            if bar2 is not None:
+                head, tail = os.path.split(path)
+                bar2.update(item_id=tail)
+
+        print("Total time to load concepts: %s s" % (timedelta(seconds=time() - start)))
 
     def setup(self, package_name, es_install_location=None):
         """
@@ -1353,8 +1358,10 @@ class Command(BaseCommand):
         if graphid is False and file_format == "json":
             graphids = [
                 str(graph.graphid)
-                for graph in models.GraphModel.objects.filter(isresource=True).exclude(
-                    pk=settings.SYSTEM_SETTINGS_RESOURCE_MODEL_ID
+                for graph in (
+                    models.GraphModel.objects.filter(isresource=True)
+                    .exclude(pk=settings.SYSTEM_SETTINGS_RESOURCE_MODEL_ID)
+                    .exclude(source_identifier__isnull=False)
                 )
             ]
         if graphid is False and file_format != "json":
@@ -1483,7 +1490,7 @@ class Command(BaseCommand):
             create_concepts = True
 
         if len(data_source) > 0:
-            transaction_id = uuid.uuid1()
+            transaction_id = uuid.uuid4()
             for source in data_source:
                 path = utils.get_valid_path(source)
                 if path is not None:

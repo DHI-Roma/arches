@@ -108,7 +108,7 @@ class BranchExcelTests(TransactionTestCase):
     def test_write(self):
         load_id = "d481d116-7c1e-4b36-b7ef-85963d482db0"
         edits = EditLog.objects.filter(transactionid=load_id)
-        self.assertTrue(len(edits) == 9)
+        self.assertTrue(len(edits) == 11)
 
     def test_export(self):
         load_id = "2d288e76-ebd3-11ee-85b8-0242ac120005"
@@ -132,6 +132,110 @@ class BranchExcelTests(TransactionTestCase):
         exported = os.path.exists(exported_file_path)
 
         self.assertTrue(exported)
+
+    def test_export_with_missing_tile_node(self):
+        """Export should not raise KeyError when a tile's tiledata is missing a node
+        that exists in the graph (simulating a node added after tiles were created)."""
+        string_nodeid = "1dd75892-4f62-11ef-be0d-323af0a1fd6a"
+        string_nodegroup_id = "1dd75892-4f62-11ef-be0d-323af0a1fd6a"
+
+        # Remove the node UUID from a tile's tiledata, simulating a tile
+        # that was created before the node was added to the graph.
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                UPDATE tiles
+                SET tiledata = tiledata - %s
+                WHERE tileid = (
+                    SELECT tileid FROM tiles WHERE nodegroupid = %s LIMIT 1
+                )
+                """,
+                [string_nodeid, string_nodegroup_id],
+            )
+            self.assertEqual(
+                cursor.rowcount,
+                1,
+                "Expected at least one tile in the string nodegroup from setUp import",
+            )
+
+        load_id = "3d288e76-ebd3-11ee-85b8-0242ac120005"
+        graph_id = "a5c3946a-a9c0-4472-9191-ffc0f35a5901"
+        graph_name = "branch_excel_test"
+        file_name = "branch_exporter_missing_node_test"
+
+        exported_file_path = os.path.join(
+            "tests/fixtures/data/archestemp", file_name + ".zip"
+        )
+        self.addCleanup(
+            lambda: (
+                os.remove(exported_file_path)
+                if os.path.exists(exported_file_path)
+                else None
+            )
+        )
+
+        exporter = BranchExcelExporter(loadid=load_id)
+        exporter.run_export_task(
+            load_id=load_id,
+            graph_id=graph_id,
+            graph_name=graph_name,
+            resource_ids=None,
+            filename=file_name,
+        )
+
+        self.assertTrue(os.path.exists(exported_file_path))
+
+    def test_export_with_orphaned_tile_node(self):
+        """Export should not raise KeyError when tile tiledata contains a node
+        UUID that is not in the graph (simulating a deleted node)."""
+        fake_node_id = "00000000-0000-0000-0000-000000000000"
+        string_nodegroup_id = "1dd75892-4f62-11ef-be0d-323af0a1fd6a"
+
+        # Add a fake node UUID to a tile's tiledata, simulating an orphaned
+        # node reference after the node was deleted from the graph.
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                UPDATE tiles
+                SET tiledata = tiledata || %s::jsonb
+                WHERE tileid = (
+                    SELECT tileid FROM tiles WHERE nodegroupid = %s LIMIT 1
+                )
+                """,
+                [json.dumps({fake_node_id: "orphaned value"}), string_nodegroup_id],
+            )
+            self.assertEqual(
+                cursor.rowcount,
+                1,
+                "Expected at least one tile in the string nodegroup from setUp import",
+            )
+
+        load_id = "4d288e76-ebd3-11ee-85b8-0242ac120005"
+        graph_id = "a5c3946a-a9c0-4472-9191-ffc0f35a5901"
+        graph_name = "branch_excel_test"
+        file_name = "branch_exporter_orphaned_node_test"
+
+        exported_file_path = os.path.join(
+            "tests/fixtures/data/archestemp", file_name + ".zip"
+        )
+        self.addCleanup(
+            lambda: (
+                os.remove(exported_file_path)
+                if os.path.exists(exported_file_path)
+                else None
+            )
+        )
+
+        exporter = BranchExcelExporter(loadid=load_id)
+        exporter.run_export_task(
+            load_id=load_id,
+            graph_id=graph_id,
+            graph_name=graph_name,
+            resource_ids=None,
+            filename=file_name,
+        )
+
+        self.assertTrue(os.path.exists(exported_file_path))
 
     def test_cli(self):
         out = StringIO()

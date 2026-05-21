@@ -6,13 +6,12 @@ For general inquiries and to get technical support from the wider Arches communi
 
 For general user installation and app documentation, visit [arches.readthedocs.io](https://arches.readthedocs.io).
 
-For the documentation pertaining to the bleeding edge code (what is in the ``master`` branch), visit [arches.readthedocs.io/en/latest](https://arches.readthedocs.io/en/latest).  We welcome new contributors; please see [Contributing to Arches](CONTRIBUTING.md) for details.
+For the documentation pertaining to the version under development, visit [arches.readthedocs.io/en/latest](https://arches.readthedocs.io/en/latest).  We welcome new contributors; please see [Contributing to Arches](CONTRIBUTING.md) for details.
 
 Issue reports are encouraged! [Please read this article](http://polite.technology/reportabug.html) before reporting issues.
 *   [Report a Bug](https://github.com/archesproject/arches/issues/new?template=bug.md)
 *   [File a Feature Ticket](https://github.com/archesproject/arches/issues/new?template=feature.md)
 
-[Version 7.6.1 release notes](https://github.com/archesproject/arches/blob/dev/7.6.x/releases/7.6.1.md)
 
 #### Quick Install
 
@@ -22,7 +21,7 @@ Installation is fully documented in the official documentation, [arches.readthed
 ```
 then
 ```
-    arches-project create myproject
+    arches-admin startproject myproject
 ```
 enter the new `myproject` directory
 ```
@@ -59,32 +58,4 @@ Our general release cycle will typically be a functional release (either major i
 - LTS (Long Term Support) releases will be maintained with patch releases for at least 27 months. Typically an LTS release will be the second minor release following a major release. 
 - Feature releases (with the exception of stable releases) will be supported only until the next feature release. After that users are expected to upgrade to the latest release on [pypi.python.org](https://pypi.python.org/pypi/arches)
 
-#### Feature roadmap
-
-The following a general plan for the Arches project. Be aware this plan is tentative and subject to change.
-
-## 8.0 - Release date: June 15, 2025
-- Activity stream enhancements
-- Support for editing and publishing graphs without having to remove resource instances
-- Support for viewing and restoring previous graph publications
-- Support for configuring currently published graphs
-- Support for search through resource relationships
-- Persistent uris for resource instance and tile data
-- Implementation resource lifecycles
-- Bulk Data Manager CLI interface
-- Migration to MapLibre
-- Django 5.2 support
-- Python 3.11 becomes minimum Python version
-
-## 8.0 - Supported Applications
-- Arches References
-- Arches Lingo
-
-## 9.0 - Release date: Sept 15, 2027
-- Full migration to Vue
-- Deprecation of the RDM
-- Deprecation of the following datatypes:
-    - concept
-    - concept-list
-    - domain
-    - domain-list datatypes
+#### For details regarding future releases, see the [feature roadmap](https://github.com/archesproject/arches-roadmap).
